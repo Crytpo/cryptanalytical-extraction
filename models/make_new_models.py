@@ -20,9 +20,11 @@ def make_new_mnist_model(hidden_size, layer_number):
 
     # Define the model architecture
     input_layer = Input(shape=(784,), name='input')
-    x = Dense(hidden_size, activation='relu', name='layer0')(input_layer)
+    x = Dense(hidden_size, activation='softmax', name='layer0')(input_layer)
     for i in range(1, layer_number):
+        # x = Dense(hidden_size, activation='softmax', name=f"layer{i}")(x)
         x = Dense(hidden_size, activation='relu', name=f"layer{i}")(x)
+
     # Output layer for multi-class as regression (non-standard approach)
     #output_layer = Dense(10, activation='softmax', name='output')(x)
     output_layer = Dense(1, activation='linear', name='output')(x)
@@ -51,7 +53,7 @@ def make_new_mnist_model(hidden_size, layer_number):
     model.summary()
 
     # Saving model path modified for MNIST
-    model_save_path = f"deti/models/mnist784_{hidden_size}x{layer_number}_1v2.keras"
+    model_save_path = f"mnist784_{hidden_size}x{layer_number}_softmax_1v2.keras"
     model.save(model_save_path)
     for l in model.layers:
         if len(l.get_weights()) > 0:
@@ -60,7 +62,7 @@ def make_new_mnist_model(hidden_size, layer_number):
             print("Bias: ", b)
     return model_save_path
 
-#make_new_mnist_model(32,2)
+make_new_mnist_model(15,1)
 
 def make_new_rescaled_model(model_path,scale):
     model = tf.keras.models.load_model(model_path)
