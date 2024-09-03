@@ -22,7 +22,7 @@ def make_new_mnist_model(hidden_size, layer_number):
     input_layer = Input(shape=(784,), name='input')
     x = Dense(hidden_size, activation='relu', name='layer0')(input_layer)
     for i in range(1, layer_number):
-        # x = Dense(hidden_size, activation='softmax', name=f"layer{i}")(x)
+        x = Dense(hidden_size, activation='softmax', name=f"layersoftmax")(x)
         x = Dense(hidden_size, activation='relu', name=f"layer{i}")(x)
 
     # Output layer for multi-class as regression (non-standard approach)
@@ -31,6 +31,8 @@ def make_new_mnist_model(hidden_size, layer_number):
 
     # Create the model
     model = Model(inputs=input_layer, outputs=output_layer)
+
+    breakpoint()
 
     # Using mean_squared_error as a loss for this regression-like approach
     model.compile(optimizer=Adam(),
@@ -53,8 +55,8 @@ def make_new_mnist_model(hidden_size, layer_number):
     model.summary()
 
     # Saving model path modified for MNIST
-    model_save_path = f"mnist784_{hidden_size}x{layer_number}_1v2.keras"
-    # model_save_path = f"mnist784_{hidden_size}x{layer_number}_softmax_1v2.keras"
+    # model_save_path = f"mnist784_{hidden_size}x{layer_number}_1v2.keras"
+    model_save_path = f"mnist784_{hidden_size}x{layer_number}_softmaxfirst_1v2.keras"
     model.save(model_save_path)
     for l in model.layers:
         if len(l.get_weights()) > 0:
