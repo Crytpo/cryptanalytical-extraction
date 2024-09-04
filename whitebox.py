@@ -97,6 +97,7 @@ def getWhiteboxSignatures(model, layerID):
     weights[-1] = signsLayer[np.newaxis, :] * weights[-1]
     biases[-1] = signsLayer * biases[-1]
     return weights, biases
+
 def getSignatures_quantized(interpreter, layerID):
     """Simulates the signature recovery and returns the corresponding weights, biases."""
     weights, biases = getWeightsAndBiases_quantized(interpreter, range(0, layerID))
