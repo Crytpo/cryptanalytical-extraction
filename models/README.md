@@ -93,3 +93,29 @@ python -m neuronWiggle --model models/mnist784_15x2_softmax1_1v2.keras --layerID
 python -m neuronWiggle --model models/mnist784_15x2_softmax1_1v2.keras --layerID 3 --seed 20 --dataset 'mnist' --quantized 2
 ```
 
+
+
+
+
+
+python -m neuronWiggle --model models/cifar3072_32x8_10.keras --layerID 2 --seed 20 --dataset 'cifar10' --quantized 2
+
+input_2 (InputLayer)        [(None, 3072)]            0         
+                                                                 
+ layer0 (Dense)              (None, 23)                70679     
+                                                                 
+ layer1 (Dense)              (None, 23)                552       
+                                                                 
+ layer2 (Dense)              (None, 23)                552       
+                                                                 
+ layer3 (Dense)              (None, 23)                552       
+                                                                 
+ layer4 (Dense)              (None, 23)                552       
+                                                                 
+ layer5 (Dense)              (None, 23)                552       
+                                                                 
+ layer6 (Dense)              (None, 23)                552       
+                                                                 
+ layer7 (Dense)              (None, 23)                552       
+                                                                 
+ output (Dense)              (None, 10)                240     
