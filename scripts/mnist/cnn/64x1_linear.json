@@ -1,0 +1,14 @@
+{
+    "dataset": "mnist",
+    "layer_type": "conv2d",
+    "hidden_size": 64,
+    "layer_number": 1,
+    "kernel_size": 3,
+    "flattodense": false,
+    "falttodense_size": -1,
+    "lastactivation": "linear",
+    "epochs": 100,
+    "bs": 64,
+    "seed": 42,
+    "load_json": ""
+}
