@@ -13,6 +13,8 @@ tf.keras.backend.set_floatx('float64')
 from tensorflow.keras.datasets import mnist, cifar10
 from tensorflow.keras.layers import Input, Conv2D, Flatten, Dense
 
+# os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+
 def str2bool(v):
     """
     Source: https://github.com/facebookresearch/ConvNeXt/blob/main/main.py
