@@ -4,7 +4,7 @@ This repository implements an attack to recover signatures and signs of a ReLU-b
 
 # Explanation of this Codebase
 
-This codebase bases its structure from Canales-Martinez et al's codebase that can be found under https://anonymous.4open.science/r/deti-C405. The codebase is a unification of code from Carlini et al.'s codebase (https://github.com/google-research/cryptanalytic-model-extraction) and Canales-Martinez et al's codebase. A lot of snippets of code are from their respective codebases. We use Carlini et al.'s signature extraction and Canales-Martinez et al's sign extraction as basis code. Carlini et al.'s functions have been slightly adapted to fit into the format of this new codebase, removing lots of global variable dependencies and cleaning away parts that were not needed. The extraction also now runs all in jax. Tensorflow is only used as an initial carrier for the weights and bias.
+This codebase bases its structure from Canales-Martinez et al's codebase that can be found under https://github.com/Crypto-TII/deti. The codebase is a unification of code from Carlini et al.'s codebase (https://github.com/google-research/cryptanalytic-model-extraction) and Canales-Martinez et al's codebase. A lot of snippets of code are from their respective codebases. We use Carlini et al.'s signature extraction and Canales-Martinez et al's sign extraction as basis code. Carlini et al.'s functions have been slightly adapted to fit into the format of this new codebase, removing lots of global variable dependencies and cleaning away parts that were not needed. The extraction also now runs all in jax. Tensorflow is only used as an initial carrier for the weights and bias.
 
 # Reproduce Attacks
 
@@ -15,6 +15,11 @@ python -m neuronWiggle --model models/mnist784_16x2_1.keras --layerID 2 --seed 2
 ```
 python -m neuronWiggle --model models/50_25x2_1_Carlini.keras --layerID 2 --seed 20 --quantized 1
 ```
+```
+python -m neuronWiggle --model models/cifar3072_16x8_10.keras --layerID 2 --seed 20 --dataset 'cifar10' --quantized 2
+```
+
+
 The `--seed` option allows to try extraction on different seeds. The `--quantized` options allow sign extraction in float16 (option 1), in float32 (option 2) or in float64 (option 0). The default is float32. For float64 the precision improvement function in the signature recovery is also run, whereas it is not run for float16 and float32. With `--signRecoveryMethod` we can signal if we want `carlini` or `neuronWiggle`, where default is `neuronWiggle`. With `--onlySign` set to True we can run only the sign recovery, skipping the signature recovery. The cifar models can only be run with this option because we have not implemented signature recovery for them.
 
 # Create a new model

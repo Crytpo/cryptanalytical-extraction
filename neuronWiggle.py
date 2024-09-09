@@ -392,8 +392,6 @@ def recoverSign(model, weights, biases, layerId, neuronId,
     return signm4, nExpNeg, nExpPos, sampleL, sampleR, tFindCrt, tSignRec, numQueries, numCritPtQueries,numPrecQueries
 
 
-
-
 if __name__=='__main__':
     logger.info("""
     # ---------------------------------------------------
@@ -422,6 +420,7 @@ if __name__=='__main__':
             set_global_vars(queries_bool=True)
     if args.layerID == len(model.layers)-1:
         set_global_vars(queries_bool=True)
+
     # Output files should be marked with the appropriate settings
     modelname = args.model.split('/')[-1].replace('.keras', '')
     quant_level = ""
