@@ -6,7 +6,7 @@
     "kernel_size": 3,
     "flattodense": true,
     "falttodense_size": -1,
-    "lastactivation": "linear",
+    "lastactivation": "softmax",
     "epochs": 100,
     "bs": 64,
     "seed": 42,

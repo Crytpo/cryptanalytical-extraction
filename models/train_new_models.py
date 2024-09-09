@@ -74,45 +74,51 @@ def make_new_models(args):
     else:
         raise NotImplementedError
 
+
+    if args.lastactivation == 'softmax':
+        num_classes = 10
+        loss = 'sparse_categorical_crossentropy'
+        metrics = ['accuracy']
+    else:
+        num_classes = 1
+        loss = 'mean_squared_error'
+        metrics = ['mean_absolute_error']
+
     # Output layer for multi-class as regression (non-standard approach)
     # The Flatten layer is still used to flatten the 2D feature maps into a 1D vector before feeding into the dense layers.'
-    output_layer = Dense(1, activation=args.lastactivation, name='output')(x)
+    output_layer = Dense(num_classes, activation=args.lastactivation, name='output')(x)
 
     # Create the model
     model = Model(inputs=input_layer, outputs=output_layer)
 
     print(model.summary())
 
-    if args.lastactivation == 'softmax':
-        # CE
-        model.compile(optimizer=Adam(),
-                    loss='sparse_categorical_crossentropy',
-                    metrics=['accuracy'])
-    else:
-        # Using mean_squared_error as a loss for this regression-like approach
-        model.compile(optimizer=Adam(),
-                    loss='mean_squared_error',
-                    metrics=['mean_absolute_error'])
-
-
     log_dir = f"models/logs/{args.layer_type}/{args.hidden_size}x{args.layer_number}/{args.lastactivation}/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
 
+    model.compile(optimizer=Adam(), loss=loss, metrics=metrics)
+
     # Train the model
     model.fit(x_train, y_train, 
-              epochs=args.epochs, batch_size=args.bs, validation_data=(x_test, y_test),
-              callbacks=[tensorboard_callback]) 
+            epochs=args.epochs, batch_size=args.bs, validation_data=(x_test, y_test),
+            callbacks=[tensorboard_callback]) 
+
+    # Saving model path modified for MNIST
+    model.save(f"{log_dir}/model.keras")
 
     # Predict the test set
     predictions_tr = model.predict(x_train)
     predictions = model.predict(x_test)
 
-    # Round predictions to the nearest integer
-    rounded_predictions_tr = np.round(predictions_tr).astype(int).flatten()
-    rounded_predictions    = np.round(predictions).astype(int).flatten()
+    if  args.lastactivation == 'softmax':
+        # Round predictions to the nearest integer
+        rounded_predictions_tr = np.argmax(predictions_tr, axis=1)
+        rounded_predictions    = np.argmax(predictions, axis=1)
+    else:
+        # Round predictions to the nearest integer
+        rounded_predictions_tr = np.round(predictions_tr).astype(int).flatten()
+        rounded_predictions    = np.round(predictions).astype(int).flatten()
 
-    # Saving model path modified for MNIST
-    model.save(f"{log_dir}/model.keras")
 
     # Calculate accuracy
     accuracy_tr = np.mean(rounded_predictions_tr == y_train)
@@ -156,7 +162,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if len(args.load_json) > 0:
-        with open(args.json_file, "r") as f:
+        with open(args.load_json, "r") as f:
             json_data = json.load(f)
 
             # Update args with JSON data
