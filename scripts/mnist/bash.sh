@@ -11,6 +11,7 @@ python models/train_new_models.py --load_json scripts/mnist/cnn/64x1_linear.json
 python models/train_new_models.py --load_json scripts/mnist/cnn/8x2_linear.json
 python models/train_new_models.py --load_json scripts/mnist/cnn/64x2_linear.json
 
+python models/train_new_models.py --load_json scripts/mnist/cnn/256x2_linear.json
 
 python models/train_new_models.py --load_json scripts/mnist/cnn/8x1_fc_linear.json
 python models/train_new_models.py --load_json scripts/mnist/cnn/64x1_fc_linear.json

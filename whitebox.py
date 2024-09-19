@@ -38,6 +38,7 @@ def getAllWeightsAndBiases_quantized(interpreter):
     weights = weights[::-1]
     biases = biases[::-1]
     return weights, biases
+
 def getWeightsAndBiases_quantized(interpreter, layers):
     weights = []
     biases = []

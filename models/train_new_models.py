@@ -13,7 +13,10 @@ tf.keras.backend.set_floatx('float64')
 from tensorflow.keras.datasets import mnist, cifar10
 from tensorflow.keras.layers import Input, Conv2D, Flatten, Dense
 
-# os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
+config = tf.compat.v1.ConfigProto()
+config.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
+config.log_device_placement = True  # to log device placement (on which device the operation ran)
 
 def str2bool(v):
     """
@@ -75,7 +78,6 @@ def make_new_models(args):
             x = Dense(args.falttodense_size, activation='relu', name='flattentodense')(x)
     else:
         raise NotImplementedError
-
 
     if args.lastactivation == 'softmax':
         num_classes = 10
@@ -151,6 +153,8 @@ if __name__ == '__main__':
     print(tf.config.list_physical_devices('GPU'))
     print("--------------------------------------------")
 
+
+
     parser = argparse.ArgumentParser(description = 'create model')
     parser.add_argument('--dataset', default="mnist", choices=['mnist', 'cifar10'], type=str, help='')
     parser.add_argument('--layer_type', default="dense", choices=['dense', 'conv2d'], type=str, help='')
@@ -178,13 +182,3 @@ if __name__ == '__main__':
     print(args)
 
     make_new_models(args)
-
-# make_new_cnn_mnist_model(8,2)
-# make_new_cnn_mnist_model(16,2)
-# make_new_cnn_mnist_model(32,2)
-# make_new_cnn_mnist_model(64,2)
-
-# make_new_cnn_mnist_model(8,1)
-# make_new_cnn_mnist_model(16,1)
-# make_new_cnn_mnist_model(32,1)
-# make_new_cnn_mnist_model(64,1)

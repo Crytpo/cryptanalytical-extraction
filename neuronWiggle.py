@@ -165,7 +165,7 @@ def recoverSign_Carlini(model, A,B,extracted_normal,extracted_bias, critical_gro
     print("Start solving signs!!")
     print("Known already extracted weights and biases: ", A,B)
     print("Extracted normal and bias for target layer: ",extracted_normal,extracted_bias)
-    print("Query counts: ",get_query_counts())
+    print("Query counts: ", get_query_counts())
 
     # initiate multiprocessing
     MPROC_THREADS = max(mp.cpu_count(), 1)
@@ -462,7 +462,7 @@ if __name__=='__main__':
         #
         weights,biases = getWhiteboxSignatures(model, args.layerID)
         # To try out whether signature extraction works when all previous weights are only up to precision of float32
-        #for i in range(len(A)):
+        # for i in range(len(A)):
         #    weights[i] = np.array(weights[i]).astype(np.float32)
         #    biases[i] = np.array(biases[i]).astype(np.float32)
         if args.layerID<len(hiddenLayerIDs)+1:
@@ -522,7 +522,7 @@ if __name__=='__main__':
         for i in range(len(weights)):
             weights[i] = np.array(weights[i]).astype(np.float16)
             biases[i] = np.array(biases[i]).astype(np.float16)
-    if args.quantized ==2: #quantized to float32
+    if args.quantized == 2: #quantized to float32
         print("Signature Extraction to float32 standards.")
         print("Sign Extraction Quantized to float32.")
         for i in range(len(weights)):

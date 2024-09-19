@@ -88,3 +88,17 @@ pip install scipy==1.9.3
 # Further Note on Full Pipeline Recovery
 
 The code only runs attacks for one layer of a DNN at each time. So, it is in a way an idealised environment where all previous layers are always assumed to be correct. To test the hypothesis on errors in the sample distance check, we changed the weights of the previous layers as can be seen in comments in the code. To extract a whole model from first to last layer the code can just be run for each layer separately. If we want a non-idealised full run then we can do so, since the extracted parameters are always saved instead of the original weights of the target layer as a new tensorflow model "{modelname}_extracted_{other_args}". Then, the next layer is still run with the original modelname as the argument but in the `neuronWiggle.py` `__main__` function there is a section marked quite at the top where signatures are recovered that denotes where to read in the extracted model instead of the original model (around line 462). This is how we would be able to run different sign combinations of the model and determine which combination was faulty. In the sign extraction there is an area marked which throws errors if the sample distance check is thrown more than 15 times and in the main method we count how often this happens and if it is more than 5 we terminate the whole execution and suggest to try with a different sign combination. If less than 5 signatures are incorrect then it is suggested to go back into the signature extraction and reextract the concerning signatures. (If we wanted to run a full attack in a non-idealised setting the code could obviously be changed in various parts to do this automatically but this was not the focus of our work.)
+
+
+
+# Issues 
+
+## GPU not found
+
+https://github.com/tensorflow/tensorflow/issues/64881
+
+```
+pip install tensorflow[and-cuda]==2.15.1
+```
+
+https://forums.developer.nvidia.com/t/can-nvidia-tensorflow-1-x-be-used-with-rtx-4090/241211
