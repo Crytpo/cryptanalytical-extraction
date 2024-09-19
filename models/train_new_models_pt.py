@@ -10,7 +10,9 @@ from torch.nn import functional as F
 from torch.optim import Adam
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
-import torch.optim as optim
+
+from torch.utils.tensorboard import SummaryWriter
+
 
 def str2bool(v):
     """
@@ -61,8 +63,8 @@ def create_mnist_dataloader(batch_size, shuffle=True, num_workers=0):
     )
 
     # Create data loaders
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
-    testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+    trainloader = DataLoader(trainset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
+    testloader = DataLoader(testset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
 
     return trainloader, testloader
 
@@ -74,6 +76,7 @@ def create_model(args):
 
     # Define input channels based on dataset
     if args.dataset == 'mnist':
+        img_size = 28
         in_channels = 1
     else:
         raise NotImplementedError(f"Dataset {args.dataset} not supported")
@@ -120,19 +123,19 @@ def create_model(args):
     else:
         num_classes = 1
         
-    expected_input_dim = args.falttodense_size if args.flattodense else 28*28*args.hidden_size
+    expected_input_dim = args.falttodense_size if args.flattodense else img_size**2*args.hidden_size
     print(f"Expected input dimension for the last linear layer: {expected_input_dim}")
 
     layers.append(nn.Linear(expected_input_dim, num_classes))
 
     # Construct the model using nn.Sequential
     model = nn.Sequential(*layers)
-    
+
     print(model)
     return model
 
 
-def train_model(model, train_loader, test_loader, epochs, device):
+def train_model(model, train_loader, test_loader, epochs, writer, device):
     """
     Trains the model on the provided data loaders.
     """
@@ -140,7 +143,7 @@ def train_model(model, train_loader, test_loader, epochs, device):
 
     # Define the optimizer
     learning_rate = 0.001  # Adjust the learning rate as needed
-    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
+    optimizer = Adam(model.parameters(), lr=learning_rate)
 
     # Define loss function based on last activation
     if args.lastactivation == 'softmax':
@@ -148,6 +151,7 @@ def train_model(model, train_loader, test_loader, epochs, device):
     else:
         loss_fn = nn.MSELoss()
 
+    total_step = len(train_loader)
     # Training loop
     for epoch in range(epochs):
         
@@ -156,23 +160,25 @@ def train_model(model, train_loader, test_loader, epochs, device):
         for i, (data, target) in enumerate(train_loader):
             data, target = data.to(device), target.to(device)
             optimizer.zero_grad()
-            breakpoint()
             output = model(data)
             loss = loss_fn(output, target)
             loss.backward()
             optimizer.step()
 
+                
+
             running_loss += loss.item()
-            if i % 100 == 99:  # Print every 100 mini-batches
-                print(f'Epoch [{epoch+1}/{epochs}], Step [{i+1}/{len(train_loader)}], Loss: {running_loss/100:.4f}')
-                running_loss = 0.0
+            # if i % 900 == 899:  # Print every 100 mini-batches
+        writer.add_scalar('Loss/train', running_loss, epoch * total_step + i)
+        print(f'Training: Epoch [{epoch+1}/{epochs}], Step [{i+1}/{len(train_loader)}], Loss: {running_loss/100:.4f}')
+        running_loss = 0.0
 
         # Testing loop
         model.eval()
         with torch.no_grad():
             correct = 0
             total = 0
-            for data, target in test_loader:
+            for batch_idx, (data, target) in enumerate(test_loader):
                 data, target = data.to(device), target.to(device)
                 output = model(data)
                 predicted = torch.argmax(output.data, dim=1) if args.lastactivation == 'softmax' else model.out_func(output).round().long()
@@ -180,9 +186,15 @@ def train_model(model, train_loader, test_loader, epochs, device):
                 correct += (predicted == target).sum().item()
 
             accuracy = 100 * correct / total
-            print(f"Epoch {epoch+1} - Accuracy: {accuracy:.2f}%")
+            print(f"Validation: Epoch {epoch+1} - Accuracy: {accuracy:.2f}%")
+
+            if (batch_idx+1) % 100 == 0:
+                writer.add_scalar('Accuracy/test', accuracy, epoch * len(test_loader) + batch_idx)
 
     print('Finished Training')
+
+    # Close the writer
+    writer.close()
 
 
 if __name__ == '__main__':
@@ -216,4 +228,8 @@ if __name__ == '__main__':
 
     model = create_model(args)
     train_loader, test_loader = create_mnist_dataloader(batch_size=args.bs)
-    train_model(model, train_loader, test_loader, epochs=args.epochs, device="cuda")
+    
+    log_dir = f"models/logs/pt/{args.layer_type}/{args.hidden_size}x{args.layer_number}/{args.lastactivation}/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    writer = SummaryWriter(log_dir)
+
+    train_model(model, train_loader, test_loader, epochs=args.epochs, writer=writer, device="cuda")
