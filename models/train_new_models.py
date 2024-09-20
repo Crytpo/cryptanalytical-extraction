@@ -153,8 +153,6 @@ if __name__ == '__main__':
     print(tf.config.list_physical_devices('GPU'))
     print("--------------------------------------------")
 
-
-
     parser = argparse.ArgumentParser(description = 'create model')
     parser.add_argument('--dataset', default="mnist", choices=['mnist', 'cifar10'], type=str, help='')
     parser.add_argument('--layer_type', default="dense", choices=['dense', 'conv2d'], type=str, help='')

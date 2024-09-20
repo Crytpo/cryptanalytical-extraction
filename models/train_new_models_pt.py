@@ -69,6 +69,21 @@ def create_mnist_dataloader(batch_size, shuffle=True, num_workers=0):
     return trainloader, testloader
 
 
+def calculate_prediction(model, dataloader, device='cuda'):
+    model.eval()  # Set the model to evaluation mode
+    
+    all_output = []
+    all_targets = []
+    with torch.no_grad():  # Disable gradient calculation for efficiency
+        for data, target in dataloader:
+            data, target = data.to(device), target.to(device)
+            outputs = model(data)
+            all_output.append(outputs.data.to('cpu'))
+            all_targets.append(target.data.to('cpu'))
+    
+    return torch.vstack(all_output), torch.concatenate(all_targets)
+
+
 def create_model(args):
     """
     Creates a model based on the provided arguments.
@@ -95,10 +110,10 @@ def create_model(args):
     layers = []
 
     # First layer
-    if args.layer_type == 'conv2d':
-        layers.append(layer_fn(in_channels, args.hidden_size, kernel_size=args.kernel_size, padding=1))  # Adjust padding as needed
-    elif args.layer_type == 'dense':
+    if args.layer_type == 'dense':
         layers.append(layer_fn(in_channels * args.hidden_size * args.hidden_size, args.hidden_size))
+    elif args.layer_type == 'conv2d':
+        layers.append(layer_fn(in_channels, args.hidden_size, kernel_size=args.kernel_size, padding=1))  # Adjust padding as needed
     else:
         raise NotImplementedError(f"Layer type {args.layer_type} not supported")
 
@@ -135,7 +150,7 @@ def create_model(args):
     return model
 
 
-def mse(predicted, target):
+def mae(predicted, target):
     return torch.mean(torch.abs(predicted - target)).item()
 
 
@@ -176,27 +191,31 @@ def train_model(args, model, train_loader, test_loader, epochs, device):
 
             predicted = torch.argmax(output.data, dim=1) if args.lastactivation == 'softmax' else output.data.squeeze()
 
+            total += target.size(0)
             if args.lastactivation == 'softmax':
-                total += target.size(0)
                 correct += (predicted == target).sum().item()
+                metric = 'accuracy'
+                metric_tmp = '%'
             else:
                 # Calculate Mean Absolute Error (MAE)
                 target = target.float()
                 output = output.squeeze()
-                correct += mse(predicted, target)
+                correct += mae(predicted, target)
+                metric = 'MAE'
+                metric_tmp = '%'
+
             loss = loss_fn(output, target)
 
             loss.backward()
             optimizer.step()
 
-            running_loss += loss.item() 
+            running_loss += loss.item()
 
-        accuracy_tr = 100 * correct / total if args.lastactivation == 'softmax' else correct 
-  
+        accuracy_tr = 100 * correct / total if args.lastactivation == 'softmax' else (1 - (correct / total)) * 100
 
         writer.add_scalar('Loss/train', running_loss, epoch * total_step + i)
-        writer.add_scalar('Accuracy/train: ', accuracy_tr, epoch * total_step + i)
-        print(f'Training: Epoch [{epoch+1}/{epochs}], Step [{i+1}/{len(train_loader)}], Accuracy: {accuracy_tr:.2f}%, Loss: {running_loss/100:.4f}')
+        writer.add_scalar(f'{metric}/train: ', accuracy_tr, epoch * total_step + i)
+        print(f'Training: Epoch [{epoch+1}/{epochs}], Step [{i+1}/{len(train_loader)}], Loss: {running_loss/100:.4f}, {metric}: {accuracy_tr:.2f}{metric_tmp}')
         running_loss = 0.0
 
         # Testing loop
@@ -209,22 +228,43 @@ def train_model(args, model, train_loader, test_loader, epochs, device):
                 output = model(data)
                 predicted = torch.argmax(output.data, dim=1) if args.lastactivation == 'softmax' else output.data.squeeze()
 
+                total += target.size(0)
                 if args.lastactivation == 'softmax':
-                    total += target.size(0)
                     correct += (predicted == target).sum().item()
+                    metric = 'accuracy'
+                    metric_tmp = '%'
                 else:
                     target = target.float()
-                    correct += mse(predicted, target) 
+                    correct += mae(predicted, target)
+                    metric = 'MAE'
+                    metric_tmp = '%'
             
-            accuracy = 100 * correct / total if args.lastactivation == 'softmax' else correct 
+            accuracy = 100 * correct / total if args.lastactivation == 'softmax' else (1 - (correct / total)) * 100
 
-            print(f"Validation: Epoch {epoch+1} - Accuracy: {accuracy:.2f}%")
-
+            print(f"Validation: Epoch {epoch+1} - {metric}: {accuracy:.2f}{metric_tmp}")
             if (batch_idx+1) % 100 == 0:
-                writer.add_scalar('Accuracy/test', accuracy, epoch * len(test_loader) + batch_idx)
+                writer.add_scalar(f'{metric}/test', accuracy, epoch * len(test_loader) + batch_idx)
 
     print('Finished Training. Save data ...')
     print('Log dir', log_dir)
+
+    predictions_tr, y_train = calculate_prediction(model, train_loader)
+    predictions, y_test  = calculate_prediction(model, test_loader)
+
+    if  args.lastactivation == 'softmax':
+        # Round predictions to the nearest integer
+        rounded_predictions_tr = torch.argmax(predictions_tr, axis=1)
+        rounded_predictions     = torch.argmax(predictions, axis=1)
+    else:
+        # Round predictions to the nearest integer
+        rounded_predictions_tr = torch.round(predictions_tr).to(int).flatten()
+        rounded_predictions     = torch.round(predictions).to(int).flatten()
+
+    # Calculate accuracy
+    accuracy_tr = (rounded_predictions_tr == y_train).float().mean()
+    accuracy    = (rounded_predictions == y_test).float().mean()
+
+    print(f"Accuracy: {accuracy_tr * 100:.2f}%, {accuracy * 100:.2f}%")
 
     args.train_acc = accuracy_tr
     args.test_acc = accuracy
@@ -234,6 +274,8 @@ def train_model(args, model, train_loader, test_loader, epochs, device):
 
     writer.close()
     torch.save(model, os.path.join(log_dir, 'model.pt'))
+
+    print(model)
 
 
 if __name__ == '__main__':
