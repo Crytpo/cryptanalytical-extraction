@@ -34,5 +34,15 @@
                 "--load_json", "scripts/mnist/dense/8x1_softmax.json" 
             ]
         },
+        {
+            "name": "pt train cnn",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "models/train_new_models_pt.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--load_json", "scripts/mnist/cnn/8x1_fc_linear.json" 
+            ]
+        },
     ]
 }

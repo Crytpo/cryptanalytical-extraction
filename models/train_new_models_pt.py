@@ -1,9 +1,10 @@
+import os
 import argparse
 import datetime
 import json
-import os
-
+import copy
 import numpy as np
+
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -12,7 +13,6 @@ from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
 from torch.utils.tensorboard import SummaryWriter
-
 
 def str2bool(v):
     """
@@ -49,14 +49,14 @@ def create_mnist_dataloader(batch_size, shuffle=True, num_workers=0):
 
     # Load the MNIST dataset
     trainset = datasets.MNIST(
-        root='./data',
+        root='/data',
         train=True,
         download=True,
         transform=transform
     )
 
     testset = datasets.MNIST(
-        root='./data',
+        root='/data',
         train=False,
         download=True,
         transform=transform
@@ -114,14 +114,14 @@ def create_model(args):
     if args.flattodense:
         if args.falttodense_size < 0:
             args.falttodense_size = args.hidden_size
-        layers.append(nn.Linear(28*28*args.hidden_size, args.falttodense_size))
+        layers.append(nn.Linear(img_size**2*args.hidden_size, args.falttodense_size))
         layers.append(nn.ReLU())  # Assuming ReLU activation
 
     # Output layer
     if args.lastactivation == 'softmax':
         num_classes = 10
     else:
-        num_classes = 1
+        num_classes = 1 # regression problem
         
     expected_input_dim = args.falttodense_size if args.flattodense else img_size**2*args.hidden_size
     print(f"Expected input dimension for the last linear layer: {expected_input_dim}")
@@ -135,42 +135,68 @@ def create_model(args):
     return model
 
 
-def train_model(model, train_loader, test_loader, epochs, writer, device):
+def mse(predicted, target):
+    return torch.mean(torch.abs(predicted - target)).item()
+
+
+def train_model(args, model, train_loader, test_loader, epochs, device):
     """
     Trains the model on the provided data loaders.
     """
+    log_dir = f"models/logs/pt/{args.layer_type}/{args.hidden_size}x{args.layer_number}/{args.lastactivation}/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    writer = SummaryWriter(log_dir)
+
     model.to(device)
 
     # Define the optimizer
-    learning_rate = 0.001  # Adjust the learning rate as needed
-    optimizer = Adam(model.parameters(), lr=learning_rate)
+    optimizer = Adam(model.parameters(), lr=args.lr)
 
     # Define loss function based on last activation
     if args.lastactivation == 'softmax':
         loss_fn = nn.CrossEntropyLoss()
     else:
-        loss_fn = nn.MSELoss()
+        loss_fn = nn.MSELoss() # regression
 
     total_step = len(train_loader)
+
+    accuracy_tr = 0
+    accuracy = 0
+
     # Training loop
     for epoch in range(epochs):
         
         running_loss = 0.0
+        correct = 0
+        total = 0
         model.train()
         for i, (data, target) in enumerate(train_loader):
             data, target = data.to(device), target.to(device)
             optimizer.zero_grad()
             output = model(data)
+
+            predicted = torch.argmax(output.data, dim=1) if args.lastactivation == 'softmax' else output.data.squeeze()
+
+            if args.lastactivation == 'softmax':
+                total += target.size(0)
+                correct += (predicted == target).sum().item()
+            else:
+                # Calculate Mean Absolute Error (MAE)
+                target = target.float()
+                output = output.squeeze()
+                correct += mse(predicted, target)
             loss = loss_fn(output, target)
+
             loss.backward()
             optimizer.step()
 
-                
+            running_loss += loss.item() 
 
-            running_loss += loss.item()
-            # if i % 900 == 899:  # Print every 100 mini-batches
+        accuracy_tr = 100 * correct / total if args.lastactivation == 'softmax' else correct 
+  
+
         writer.add_scalar('Loss/train', running_loss, epoch * total_step + i)
-        print(f'Training: Epoch [{epoch+1}/{epochs}], Step [{i+1}/{len(train_loader)}], Loss: {running_loss/100:.4f}')
+        writer.add_scalar('Accuracy/train: ', accuracy_tr, epoch * total_step + i)
+        print(f'Training: Epoch [{epoch+1}/{epochs}], Step [{i+1}/{len(train_loader)}], Accuracy: {accuracy_tr:.2f}%, Loss: {running_loss/100:.4f}')
         running_loss = 0.0
 
         # Testing loop
@@ -181,20 +207,33 @@ def train_model(model, train_loader, test_loader, epochs, writer, device):
             for batch_idx, (data, target) in enumerate(test_loader):
                 data, target = data.to(device), target.to(device)
                 output = model(data)
-                predicted = torch.argmax(output.data, dim=1) if args.lastactivation == 'softmax' else model.out_func(output).round().long()
-                total += target.size(0)
-                correct += (predicted == target).sum().item()
+                predicted = torch.argmax(output.data, dim=1) if args.lastactivation == 'softmax' else output.data.squeeze()
 
-            accuracy = 100 * correct / total
+                if args.lastactivation == 'softmax':
+                    total += target.size(0)
+                    correct += (predicted == target).sum().item()
+                else:
+                    target = target.float()
+                    correct += mse(predicted, target) 
+            
+            accuracy = 100 * correct / total if args.lastactivation == 'softmax' else correct 
+
             print(f"Validation: Epoch {epoch+1} - Accuracy: {accuracy:.2f}%")
 
             if (batch_idx+1) % 100 == 0:
                 writer.add_scalar('Accuracy/test', accuracy, epoch * len(test_loader) + batch_idx)
 
-    print('Finished Training')
+    print('Finished Training. Save data ...')
+    print('Log dir', log_dir)
 
-    # Close the writer
+    args.train_acc = accuracy_tr
+    args.test_acc = accuracy
+    args_dict = copy.deepcopy(vars(args))
+    with open(os.path.join(log_dir, 'args.json'), 'w') as fp:
+        json.dump(args_dict, fp, indent=4)
+
     writer.close()
+    torch.save(model, os.path.join(log_dir, 'model.pt'))
 
 
 if __name__ == '__main__':
@@ -212,6 +251,7 @@ if __name__ == '__main__':
     parser.add_argument('--falttodense_size', default=-1, type=int, help='')
     parser.add_argument('--lastactivation', default="linear", type=str, help='')
     parser.add_argument('--epochs', default=1, type=int, help='')
+    parser.add_argument('--lr', default=0.01, type=float, help='')
     parser.add_argument('--bs', default=64, type=int, help='')
     parser.add_argument('--seed', default=42, type=int, help='')
 
@@ -228,8 +268,5 @@ if __name__ == '__main__':
 
     model = create_model(args)
     train_loader, test_loader = create_mnist_dataloader(batch_size=args.bs)
-    
-    log_dir = f"models/logs/pt/{args.layer_type}/{args.hidden_size}x{args.layer_number}/{args.lastactivation}/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    writer = SummaryWriter(log_dir)
 
-    train_model(model, train_loader, test_loader, epochs=args.epochs, writer=writer, device="cuda")
+    train_model(args, model, train_loader, test_loader, epochs=args.epochs, device="cuda")
