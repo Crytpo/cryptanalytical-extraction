@@ -266,8 +266,8 @@ def train_model(args, model, train_loader, test_loader, epochs, device):
 
     print(f"Accuracy: {accuracy_tr * 100:.2f}%, {accuracy * 100:.2f}%")
 
-    args.train_acc = accuracy_tr
-    args.test_acc = accuracy
+    args.train_acc = accuracy_tr.item()
+    args.test_acc = accuracy.item()
     args_dict = copy.deepcopy(vars(args))
     with open(os.path.join(log_dir, 'args.json'), 'w') as fp:
         json.dump(args_dict, fp, indent=4)
@@ -293,7 +293,7 @@ if __name__ == '__main__':
     parser.add_argument('--falttodense_size', default=-1, type=int, help='')
     parser.add_argument('--lastactivation', default="linear", type=str, help='')
     parser.add_argument('--epochs', default=1, type=int, help='')
-    parser.add_argument('--lr', default=0.01, type=float, help='')
+    parser.add_argument('--lr', default=0.001, type=float, help='')
     parser.add_argument('--bs', default=64, type=int, help='')
     parser.add_argument('--seed', default=42, type=int, help='')
 
@@ -301,11 +301,13 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
+   
     if len(args.load_json) > 0:
         with open(args.load_json, "r") as f:
             json_data = json.load(f)
             args.__dict__.update(json_data)
 
+    args.epochs = 1
     print(args)
 
     model = create_model(args)
