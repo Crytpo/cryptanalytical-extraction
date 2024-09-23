@@ -11,12 +11,13 @@ from tensorflow.keras.optimizers import Adam
 import tensorflow_model_optimization as tfmot
 tf.keras.backend.set_floatx('float64')
 from tensorflow.keras.datasets import mnist, cifar10
-from tensorflow.keras.layers import Input, Conv2D, Flatten, Dense
+from tensorflow.keras.layers import Input, Conv2D, Flatten, Dense, AveragePooling2D, MaxPooling2D
 
 os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'
 config = tf.compat.v1.ConfigProto()
 config.gpu_options.allow_growth = True  # dynamically grow the memory used on the GPU
 config.log_device_placement = True  # to log device placement (on which device the operation ran)
+
 
 def str2bool(v):
     """
@@ -48,37 +49,52 @@ def make_new_models(args):
     else:
         raise NotImplementedError
 
-    if args.layer_type == 'dense':
-        x_train = x_train.reshape(-1, 784)
-        x_test = x_test.reshape(-1, 784)
+    if args.architecture == 'relatedwork':
+        if args.layer_type == 'dense':
+            x_train = x_train.reshape(-1, 784)
+            x_test = x_test.reshape(-1, 784)
 
-        # Define the model architecture
-        input_layer = Input(shape=(784,), name='input')
-        x = Dense(args.hidden_size, activation='relu', name='layer0')(input_layer)
-        for i in range(1, args.layer_number):
-            x = Dense(args.hidden_size, activation='relu', name=f"layer{i}")(x)
+            # Define the model architecture
+            input_layer = Input(shape=(784,), name='input')
+            x = Dense(args.hidden_size, activation='relu', name='layer0')(input_layer)
+            for i in range(1, args.layer_number):
+                x = Dense(args.hidden_size, activation='relu', name=f"layer{i}")(x)
 
-    elif args.layer_type == 'conv2d':
-        # Define the model architecture
+        elif args.layer_type == 'conv2d':
+            # Define the model architecture
+            input_layer = Input(shape=(28, 28, 1), name='input')  # Assuming 28x28 grayscale images
+
+            # Convolutional layers
+            x = Conv2D(args.hidden_size, (3, 3), activation='relu', padding='same', name='layer0')(input_layer)
+            for i in range(1, args.layer_number):
+                x = Conv2D(args.hidden_size, (3, 3), activation='relu', padding='same', name=f"layer{i}")(x)
+
+            # Flatten the output to feed into dense layers
+            x = Flatten()(x)
+
+            if args.flattodense:
+                if args.falttodense_size < 0:
+                    print("set flat to dense same as hidden size")
+                    args.falttodense_size = args.hidden_size
+                # Dense layersimport tensorflow_model_optimization as tfmot
+                        
+    elif args.architecture == 'vgg':
+        # Define the model architecture 
+        # https://github.com/ashushekar/VGG16/blob/master/implementation.py
         input_layer = Input(shape=(28, 28, 1), name='input')  # Assuming 28x28 grayscale images
 
         # Convolutional layers
-        x = Conv2D(args.hidden_size, (3, 3), activation='relu', padding='same', name='layer0')(input_layer)
-        for i in range(1, args.layer_number):
-            x = Conv2D(args.hidden_size, (3, 3), activation='relu', padding='same', name=f"layer{i}")(x)
+        x = Conv2D(32, (3, 3), activation='relu', padding='same', name='conv0')(input_layer)
+        # x = Conv2D(32, (3, 3), activation='relu', padding='same', name='conv0.1')(input_layer)
+        x = AveragePooling2D(pool_size=(2,2), strides=(2,2), name='avgpool0')(x)
+        x = Conv2D(64, (3, 3), activation='relu', padding='same', name='conv1')(x)
+        # x = Conv2D(64, (3, 3), activation='relu', padding='same', name='conv1.1')(x)
+        x = AveragePooling2D(pool_size=(2,2), strides=(2,2), name='avgpool1')(x)
+        x = Dense(64, activation='relu', name=f"dense0")(x)
+        x = AveragePooling2D(pool_size=(6,6), strides=(2,2), name='avgpool2')(x)
 
-        # Flatten the output to feed into dense layers
         x = Flatten()(x)
-
-        if args.flattodense:
-            if args.falttodense_size < 0:
-                print("set flat to dense same as hidden size")
-                args.falttodense_size = args.hidden_size
-            # Dense layers
-            x = Dense(args.falttodense_size, activation='relu', name='flattentodense')(x)
-    else:
-        raise NotImplementedError
-
+        
     if args.lastactivation == 'softmax':
         num_classes = 10
         loss = 'sparse_categorical_crossentropy'
@@ -90,14 +106,18 @@ def make_new_models(args):
 
     # Output layer for multi-class as regression (non-standard approach)
     # The Flatten layer is still used to flatten the 2D feature maps into a 1D vector before feeding into the dense layers.'
-    output_layer = Dense(num_classes, activation=args.lastactivation, name='output')(x)
+    output_layer = Dense(num_classes, activation=args.lastactivation, name='dense')(x)
 
     # Create the model
     model = Model(inputs=input_layer, outputs=output_layer)
 
     print(model.summary())
 
-    log_dir = f"models/logs/{args.layer_type}/{args.hidden_size}x{args.layer_number}/{args.lastactivation}/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    if args.architecture == 'relatedwork':
+        log_dir = f"models/logs/{args.architecture}/{args.layer_type}/{args.hidden_size}x{args.layer_number}/{args.lastactivation}/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    elif args.architecture == 'vgg':
+        log_dir = f"models/logs/{args.architecture}/{args.lastactivation}/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+   
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
 
     model.compile(optimizer=Adam(), loss=loss, metrics=metrics)
@@ -155,6 +175,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser(description = 'create model')
     parser.add_argument('--dataset', default="mnist", choices=['mnist', 'cifar10'], type=str, help='')
+    parser.add_argument('--architecture', default="relatedwork", choices=['relatedwork', 'vgg'], type=str, help='')
     parser.add_argument('--layer_type', default="dense", choices=['dense', 'conv2d'], type=str, help='')
     parser.add_argument('--hidden_size', default=8, type=int, help='')
     parser.add_argument('--layer_number', default=1, type=int, help='')

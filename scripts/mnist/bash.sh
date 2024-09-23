@@ -33,6 +33,9 @@ python models/train_new_models_pt.py --load_json scripts/mnist/cnn/64x2_fc_softm
 
 
 ### Tensorflow Implementation
+
+
+## RelateWork
 # dense
 python models/train_new_models.py --load_json scripts/mnist/dense/8x1_softmax.json
 python models/train_new_models.py --load_json scripts/mnist/dense/64x1_softmax.json
@@ -63,3 +66,7 @@ python models/train_new_models.py --load_json scripts/mnist/cnn/8x1_fc_softmax.j
 python models/train_new_models.py --load_json scripts/mnist/cnn/64x1_fc_softmax.json
 python models/train_new_models.py --load_json scripts/mnist/cnn/8x2_fc_softmax.json
 python models/train_new_models.py --load_json scripts/mnist/cnn/64x2_fc_softmax.json
+
+## VGG
+python models/train_new_models.py --load_json scripts/mnist/vgg/simple_linear.json
+python models/train_new_models.py --load_json scripts/mnist/vgg/simple_softmax.json

@@ -44,7 +44,8 @@ def create_mnist_dataloader(batch_size, shuffle=True, num_workers=0):
     # Define transformations
     transform = transforms.Compose([
         transforms.ToTensor(),
-        transforms.Normalize((0.1307,), (0.3081,))
+        # transforms.Normalize((0.1307,), (0.3081,))
+        transforms.Normalize((0.5,), (0.5,))
     ])
 
     # Load the MNIST dataset
@@ -135,10 +136,11 @@ def create_model(args):
     # Output layer
     if args.lastactivation == 'softmax':
         num_classes = 10
+        expected_input_dim = args.falttodense_size if args.flattodense else args.hidden_size
     else:
         num_classes = 1 # regression problem
-        
-    expected_input_dim = args.falttodense_size if args.flattodense else img_size**2*args.hidden_size
+        expected_input_dim = args.falttodense_size if args.flattodense else img_size**2*args.hidden_size
+
     print(f"Expected input dimension for the last linear layer: {expected_input_dim}")
 
     layers.append(nn.Linear(expected_input_dim, num_classes))
@@ -292,7 +294,7 @@ if __name__ == '__main__':
     parser.add_argument('--flattodense', default=True, type=str2bool, help='')
     parser.add_argument('--falttodense_size', default=-1, type=int, help='')
     parser.add_argument('--lastactivation', default="linear", type=str, help='')
-    parser.add_argument('--epochs', default=1, type=int, help='')
+    parser.add_argument('--epochs', default=100, type=int, help='')
     parser.add_argument('--lr', default=0.001, type=float, help='')
     parser.add_argument('--bs', default=64, type=int, help='')
     parser.add_argument('--seed', default=42, type=int, help='')
@@ -307,7 +309,7 @@ if __name__ == '__main__':
             json_data = json.load(f)
             args.__dict__.update(json_data)
 
-    args.epochs = 1
+    #args.epochs = 1
     print(args)
 
     model = create_model(args)

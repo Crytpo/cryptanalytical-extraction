@@ -1,0 +1,9 @@
+{
+    "dataset": "mnist",
+    "architecture": "vgg",
+    "lastactivation": "linear",
+    "epochs": 100,
+    "bs": 64,
+    "seed": 42,
+    "load_json": ""
+}
