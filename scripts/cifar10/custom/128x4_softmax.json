@@ -1,6 +1,5 @@
 {
     "dataset": "cifar10",
-    "layer_type": "dense",
     "layers": [
         {
             "name": 0,
@@ -33,12 +32,6 @@
             "activation": "softmax"
         }
     ],
-    "hidden_size": 128,
-    "layer_number": 4,
-    "kernel_size": 3,
-    "flattodense": false,
-    "falttodense_size": -1,
-    "lastactivation": "softmax",
     "epochs": 100,
     "bs": 1024,
     "lr": 0.001,
