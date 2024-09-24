@@ -140,22 +140,34 @@ def create_model(args):
 
             layer_fn = nn.Linear
 
-            if len(args.layers) > 0:
+            if len(args.layers) > 0: # Custom Network
                 print("custom layer")
                 for i, layer in enumerate(args.layers):
                     if layer['layer_type'] == 'dense':
                         layer_fn = nn.Linear
-                    
-                    if i == 0:
-                        layers.append(layer_fn(self.img_size**2*self.in_channels, layer['hidden_size']))
-                    else:
-                        layers.append(layer_fn(args.layers[i-1]['hidden_size'], layer['hidden_size']))
-                    
+
+                        if i == 0:
+                            layers.append(layer_fn(self.img_size**2*self.in_channels, layer['hidden_size']))
+                        else:
+                            layers.append(layer_fn(args.layers[i-1]['hidden_size'], layer['hidden_size']))
+
+                    elif layer['layer_type'] == 'conv2d':
+                        layer_fn = nn.Conv2d
+                        if i == 0:
+                            layers.append(layer_fn(self.img_size**2*self.in_channels, layer['hidden_size'], kernel_size=layer['kernel_size'], padding='valid')) 
+                        else:
+                            layers.append(layer_fn(args.layers[i-1]['hidden_size'], layer['hidden_size'], kernel_size=layer['kernel_size'], padding='valid')) 
+
+
+                    elif layer['layer_type'] == 'avgpooling':
+                        layer_fn = nn.AvgPool2d
+                        layers.append(layer_fn(args.layers[i]['kernel_size'], padding=1))
+
                     if i == len(args.layers)-1:
                         activation = nn.Softmax(dim=-1) 
 
                     layers.append(activation)
-            else:   
+            else:   # Foerster's implementation 
                 # Define layer type and activation function
                 if args.layer_type == 'dense':
                     layer_fn = nn.Linear
