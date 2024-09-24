@@ -28,7 +28,7 @@ def str2bool(v):
         raise argparse.ArgumentTypeError('Boolean value expected.')
 
 
-def create_mnist_dataloader(batch_size, shuffle=True, num_workers=0):
+def create_dataloader(batch_size, shuffle=True, num_workers=0):
     """
     Creates a data loader for the MNIST dataset.
 
@@ -41,27 +41,59 @@ def create_mnist_dataloader(batch_size, shuffle=True, num_workers=0):
         torch.utils.data.DataLoader: The data loader for the MNIST dataset.
     """
 
-    # Define transformations
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        # transforms.Normalize((0.1307,), (0.3081,))
-        transforms.Normalize((0.5,), (0.5,))
-    ])
+    if args.dataset == 'mnist':
+        # Define transformations
+        transform = transforms.Compose([
+            transforms.ToTensor(),
+            # transforms.Normalize((0.1307,), (0.3081,))
+            transforms.Normalize((0.5,), (0.5,))
+        ])
 
-    # Load the MNIST dataset
-    trainset = datasets.MNIST(
-        root='/data',
-        train=True,
-        download=True,
-        transform=transform
-    )
+        # Load the MNIST dataset
+        trainset = datasets.MNIST(
+            root='/data',
+            train=True,
+            download=True,
+            transform=transform
+        )
 
-    testset = datasets.MNIST(
-        root='/data',
-        train=False,
-        download=True,
-        transform=transform
-    )
+        testset = datasets.MNIST(
+            root='/data',
+            train=False,
+            download=True,
+            transform=transform
+        )
+
+    elif args.dataset == 'cifar10':
+        # Define transformations
+        train_transform = transforms.Compose([
+            transforms.RandomHorizontalFlip(),
+            # transforms.RandomCrop(32, padding=4),
+            # transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.2),
+            transforms.ToTensor(),
+            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
+        ])
+
+        test_transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
+        ])
+
+
+        # Load the MNIST dataset
+        trainset = datasets.CIFAR10(
+            root='/data',
+            train=True,
+            download=True,
+            transform=train_transform
+        )
+
+        testset = datasets.CIFAR10(
+            root='/data',
+            train=False,
+            download=True,
+            transform=test_transform
+        ) 
 
     # Create data loaders
     trainloader = DataLoader(trainset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
@@ -89,11 +121,93 @@ def create_model(args):
     """
     Creates a model based on the provided arguments.
     """
+    class FlexibleNet(nn.Module):
+        def __init__(self, args):
+            super(FlexibleNet, self).__init__()
 
+            # Define input channels based on dataset
+            if args.dataset == 'mnist':
+                self.img_size = 28
+                self.in_channels = 1
+            elif args.dataset == 'cifar10':
+                self.img_size = 32
+                self.in_channels = 3
+            else:
+                raise NotImplementedError(f"Dataset {args.dataset} not supported")
+
+            layers = []
+            activation = nn.ReLU()  # Assuming ReLU activation for each layer
+
+            layer_fn = nn.Linear
+
+            if len(args.layers) > 0:
+                print("custom layer")
+                for i, layer in enumerate(args.layers):
+                    if layer['layer_type'] == 'dense':
+                        layer_fn = nn.Linear
+                    
+                    if i == 0:
+                        layers.append(layer_fn(self.img_size**2*self.in_channels, layer['hidden_size']))
+                    else:
+                        layers.append(layer_fn(args.layers[i-1]['hidden_size'], layer['hidden_size']))
+                    
+                    if i == len(args.layers)-1:
+                        activation = nn.Softmax(dim=-1) 
+
+                    layers.append(activation)
+            else:   
+                # Define layer type and activation function
+                if args.layer_type == 'dense':
+                    layer_fn = nn.Linear
+                elif args.layer_type == 'conv2d':
+                    layer_fn = nn.Conv2d 
+                else:
+                    raise NotImplementedError(f"Layer type {args.layer_type} not supported")
+                
+                # First layer
+                if args.layer_type == 'dense':
+                    layers.append(layer_fn(self.img_size**2*self.in_channels, args.hidden_size))
+                elif args.layer_type == 'conv2d':
+                    layers.append(layer_fn(self.in_channels, args.hidden_size, kernel_size=args.kernel_size, padding='valid')) 
+                else:
+                    raise NotImplementedError(f"Layer type {args.layer_type} not supported")
+
+                layers.append(activation)
+
+                # Intermediate layers
+                for _ in range(1, args.layer_number):
+                    if args.layer_type == 'dense':
+                        layers.append(layer_fn(args.hidden_size, args.hidden_size))
+                    elif args.layer_type == 'conv2d':
+                        layers.append(layer_fn(args.hidden_size, args.hidden_size, kernel_size=args.kernel_size, padding='valid'))
+                    layers.append(activation)
+
+                # Output layer
+                if args.lastactivation == 'softmax':
+                    num_classes = 10
+                    expected_input_dim = args.falttodense_size if args.flattodense else args.hidden_size
+                else:
+                    num_classes = 1 # regression problem
+                    expected_input_dim = args.falttodense_size if args.flattodense else self.img_size**2*args.hidden_size
+                layers.append(nn.Linear(expected_input_dim, num_classes))
+
+                if args.lastactivation == 'softmax':
+                    layers.append(nn.Softmax(dim=1))  # Softmax activation for classification
+
+            self.model = nn.Sequential(*layers)
+
+        def forward(self, x):
+            x = x.view(-1, self.img_size**2*self.in_channels)  # Flatten the input tensor
+            x = self.model(x)
+            return x
+    """
     # Define input channels based on dataset
     if args.dataset == 'mnist':
         img_size = 28
         in_channels = 1
+    elif args.dataset == 'cifar10':
+        img_size = 32
+        in_channels = 3
     else:
         raise NotImplementedError(f"Dataset {args.dataset} not supported")
 
@@ -112,7 +226,7 @@ def create_model(args):
 
     # First layer
     if args.layer_type == 'dense':
-        layers.append(layer_fn(in_channels * args.hidden_size * args.hidden_size, args.hidden_size))
+        layers.append(layer_fn(in_channels, args.hidden_size))
     elif args.layer_type == 'conv2d':
         layers.append(layer_fn(in_channels, args.hidden_size, kernel_size=args.kernel_size, padding=1))  # Adjust padding as needed
     else:
@@ -121,17 +235,21 @@ def create_model(args):
     layers.append(activation)  # Assuming ReLU activation for each layer
 
     for _ in range(1, args.layer_number):
-        layers.append(layer_fn(args.hidden_size, args.hidden_size, kernel_size=args.kernel_size, padding='valid'))
+        if args.layer_type == 'dense':
+            layers.append(layer_fn(args.hidden_size, args.hidden_size))
+        elif args.layer_type == 'conv2d':
+            layers.append(layer_fn(args.hidden_size, args.hidden_size, kernel_size=args.kernel_size, padding='valid'))
         layers.append(activation)
 
-    # Flatten and dense layers if specified
-    layers.append(nn.Flatten())
+    if args.layer_type == 'conv2d':
+        # Flatten and dense layers if specified
+        layers.append(nn.Flatten())
 
-    if args.flattodense:
-        if args.falttodense_size < 0:
-            args.falttodense_size = args.hidden_size
-        layers.append(nn.Linear(img_size**2*args.hidden_size, args.falttodense_size))
-        layers.append(nn.ReLU())  # Assuming ReLU activation
+        if args.flattodense:
+            if args.falttodense_size < 0:
+                args.falttodense_size = args.hidden_size
+            layers.append(nn.Linear(img_size**2*args.hidden_size, args.falttodense_size))
+            layers.append(nn.ReLU())  # Assuming ReLU activation
 
     # Output layer
     if args.lastactivation == 'softmax':
@@ -144,10 +262,15 @@ def create_model(args):
     print(f"Expected input dimension for the last linear layer: {expected_input_dim}")
 
     layers.append(nn.Linear(expected_input_dim, num_classes))
+    if args.lastactivation == 'softmax':
+        layers.append(nn.Softmax(dim=1))
 
     # Construct the model using nn.Sequential
     model = nn.Sequential(*layers)
 
+    print(model)
+    """
+    model = FlexibleNet(args)
     print(model)
     return model
 
@@ -160,7 +283,7 @@ def train_model(args, model, train_loader, test_loader, epochs, device):
     """
     Trains the model on the provided data loaders.
     """
-    log_dir = f"models/logs/pt/{args.layer_type}/{args.hidden_size}x{args.layer_number}/{args.lastactivation}/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    log_dir = f"models/logs/pt/{args.dataset}/{args.layer_type}/{args.hidden_size}x{args.layer_number}/{args.lastactivation}/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     writer = SummaryWriter(log_dir)
 
     model.to(device)
@@ -275,7 +398,8 @@ def train_model(args, model, train_loader, test_loader, epochs, device):
         json.dump(args_dict, fp, indent=4)
 
     writer.close()
-    torch.save(model, os.path.join(log_dir, 'model.pt'))
+    checkpoint = {'state_dict': model.state_dict(),'optimizer': optimizer.state_dict()}
+    torch.save(checkpoint, os.path.join(log_dir, 'model.pt'))
 
     print(model)
 
@@ -303,7 +427,6 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-   
     if len(args.load_json) > 0:
         with open(args.load_json, "r") as f:
             json_data = json.load(f)
@@ -313,6 +436,6 @@ if __name__ == '__main__':
     print(args)
 
     model = create_model(args)
-    train_loader, test_loader = create_mnist_dataloader(batch_size=args.bs)
+    train_loader, test_loader = create_dataloader(batch_size=args.bs)
 
     train_model(args, model, train_loader, test_loader, epochs=args.epochs, device="cuda")

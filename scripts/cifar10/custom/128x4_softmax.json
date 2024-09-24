@@ -1,0 +1,47 @@
+{
+    "dataset": "cifar10",
+    "layer_type": "dense",
+    "layers": [
+        {
+            "name": 0,
+            "layer_type": "dense",
+            "hidden_size": 256,
+            "activation": "relu"
+        },
+        {
+            "name": 1,
+            "layer_type": "dense",
+            "hidden_size": 128,
+            "activation": "relu"
+        },
+        {
+            "name": 2,
+            "layer_type": "dense",
+            "hidden_size": 64,
+            "activation": "relu"
+        },
+        {
+            "name": 3,
+            "layer_type": "dense",
+            "hidden_size": 32,
+            "activation": "relu"
+        },
+        {
+            "name": 4,
+            "layer_type": "dense",
+            "hidden_size": 10,
+            "activation": "softmax"
+        }
+    ],
+    "hidden_size": 128,
+    "layer_number": 4,
+    "kernel_size": 3,
+    "flattodense": false,
+    "falttodense_size": -1,
+    "lastactivation": "softmax",
+    "epochs": 100,
+    "bs": 1024,
+    "lr": 0.001,
+    "seed": 42,
+    "load_json": ""
+}
