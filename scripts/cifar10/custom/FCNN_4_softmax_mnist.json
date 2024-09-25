@@ -1,5 +1,6 @@
 {
     "dataset": "mnist",
+    "layer_type": "custom",
     "layers": [
         {
             "name": 0,
@@ -32,7 +33,7 @@
             "activation": "softmax"
         }
     ],
-    "epochs": 100,
+    "epochs": 1,
     "bs": 1024,
     "lr": 0.001,
     "seed": 42,

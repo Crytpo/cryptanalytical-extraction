@@ -1,5 +1,6 @@
 {
     "dataset": "cifar10",
+    "layer_type": "custom",
     "layers": [
         {
             "name": 0,

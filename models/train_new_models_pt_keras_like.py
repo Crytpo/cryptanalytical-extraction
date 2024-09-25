@@ -232,12 +232,10 @@ def train_model(args, model, train_loader, test_loader, epochs, device):
     """
     Trains the model on the provided data loaders.
     """
-    log_dir = f"models/logs/pt/{args.dataset}/{args.layer_type}/{args.hidden_size}x{args.layer_number}/{args.lastactivation}/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    writer = SummaryWriter(log_dir)
-
+  
+    # writer = SummaryWriter(log_dir)
   
     model.to(device)
-
 
     loop = TrainingLoop(
         model,
@@ -251,23 +249,17 @@ def train_model(args, model, train_loader, test_loader, epochs, device):
     fitted = loop.fit(
         train_loader,
         test_loader,
-        epochs=10,
+        epochs=args.epochs,
         callbacks=[
             EarlyStopping(monitor='val_loss', mode='min', patience=20),
         ],
     )
 
-
-    breakpoint()
-
-    # Saving model path modified for MNIST
-    model.save(f"{log_dir}/model.keras")
-
     # Predict the test set
-    predictions_tr = model.predict(x_train)
-    predictions = model.predict(x_test)
+    predictions_tr, y_train = calculate_prediction(model, train_loader)
+    predictions, y_test  = calculate_prediction(model, test_loader)
 
-    if  args.lastactivation == 'softmax':
+    if  args.lastactivation == 'softmax' or args.layers[-1]['activation'] == 'softmax':
         # Round predictions to the nearest integer
         rounded_predictions_tr = np.argmax(predictions_tr, axis=1)
         rounded_predictions    = np.argmax(predictions, axis=1)
@@ -276,89 +268,16 @@ def train_model(args, model, train_loader, test_loader, epochs, device):
         rounded_predictions_tr = np.round(predictions_tr).astype(int).flatten()
         rounded_predictions    = np.round(predictions).astype(int).flatten()
 
-
-    # Calculate accuracy
-    accuracy_tr = np.mean(rounded_predictions_tr == y_train)
-    accuracy    = np.mean(rounded_predictions == y_test)
-
-
-
-        #     predicted = torch.argmax(output.data, dim=1) if args.lastactivation == 'softmax' else output.data.squeeze()
-
-        #     total += target.size(0)
-        #     if args.lastactivation == 'softmax':
-        #         correct += (predicted == target).sum().item()
-        #         metric = 'accuracy'
-        #         metric_tmp = '%'
-        #     else:
-        #         # Calculate Mean Absolute Error (MAE)
-        #         target = target.float()
-        #         output = output.squeeze()
-        #         correct += mae(predicted, target)
-        #         metric = 'MAE'
-        #         metric_tmp = '%'
-
-        #     loss = loss_fn(output, target)
-
-        #     loss.backward()
-        #     optimizer.step()
-
-        #     running_loss += loss.item()
-
-        # accuracy_tr = 100 * correct / total if args.lastactivation == 'softmax' else (1 - (correct / total)) * 100
-
-        # writer.add_scalar('Loss/train', running_loss, epoch * total_step + step)
-        # writer.add_scalar(f'{metric}/train: ', accuracy_tr, epoch * total_step + step)
-        # print(f'Training: Epoch [{epoch+1}/{epochs}], Step [{step+1}/{len(train_loader)}], Loss: {running_loss/100:.4f}, {metric}: {accuracy_tr:.2f}{metric_tmp}')
-        # running_loss = 0.0
-
-        # # Testing loop
-        # model.eval()
-        # with torch.no_grad():
-        #     correct = 0
-        #     total = 0
-        #     for batch_idx, (data, target) in enumerate(test_loader):
-        #         data, target = data.to(device), target.to(device)
-        #         output = model(data)
-        #         predicted = torch.argmax(output.data, dim=1) if args.lastactivation == 'softmax' else output.data.squeeze()
-
-        #         total += target.size(0)
-        #         if args.lastactivation == 'softmax':
-        #             correct += (predicted == target).sum().item()
-        #             metric = 'accuracy'
-        #             metric_tmp = '%'
-        #         else:
-        #             target = target.float()
-        #             correct += mae(predicted, target)
-        #             metric = 'MAE'
-        #             metric_tmp = '%'
-            
-        #     accuracy = 100 * correct / total if args.lastactivation == 'softmax' else (1 - (correct / total)) * 100
-
-        #     print(f"Validation: Epoch {epoch+1} - {metric}: {accuracy:.2f}{metric_tmp}")
-        #     if (batch_idx+1) % 100 == 0:
-        #         writer.add_scalar(f'{metric}/test', accuracy, epoch * len(test_loader) + batch_idx)
-
-    print('Finished Training. Save data ...')
-    print('Log dir', log_dir)
-
-    predictions_tr, y_train = calculate_prediction(model, train_loader)
-    predictions, y_test  = calculate_prediction(model, test_loader)
-
-    if  args.lastactivation == 'softmax':
-        # Round predictions to the nearest integer
-        rounded_predictions_tr = torch.argmax(predictions_tr, axis=1)
-        rounded_predictions     = torch.argmax(predictions, axis=1)
-    else:
-        # Round predictions to the nearest integer
-        rounded_predictions_tr = torch.round(predictions_tr).to(int).flatten()
-        rounded_predictions     = torch.round(predictions).to(int).flatten()
-
     # Calculate accuracy
     accuracy_tr = (rounded_predictions_tr == y_train).float().mean()
     accuracy    = (rounded_predictions == y_test).float().mean()
 
     print(f"Accuracy: {accuracy_tr * 100:.2f}%, {accuracy * 100:.2f}%")
+
+    log_dir = f"models/logs/pt/{args.dataset}/{args.layer_type}/{args.hidden_size}x{args.layer_number}/{args.lastactivation}/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    os.makedirs(log_dir, exist_ok=True)
+    print('Finished Training. Save data ...')
+    print('Log dir', log_dir)
 
     args.train_acc = accuracy_tr.item()
     args.test_acc = accuracy.item()
@@ -366,8 +285,9 @@ def train_model(args, model, train_loader, test_loader, epochs, device):
     with open(os.path.join(log_dir, 'args.json'), 'w') as fp:
         json.dump(args_dict, fp, indent=4)
 
-    writer.close()
-    checkpoint = {'state_dict': model.state_dict(),'optimizer': optimizer.state_dict()}
+    # writer.close()
+    # checkpoint = {'state_dict': model.state_dict(),'optimizer': optimizer.state_dict()}
+    checkpoint = {'state_dict': model.state_dict(),'accuracy': {"train": args.train_acc, "test": args.test_acc}}
     torch.save(checkpoint, os.path.join(log_dir, 'model.pt'))
 
     print(model)
