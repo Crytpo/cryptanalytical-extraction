@@ -4,6 +4,7 @@ import datetime
 import json
 import copy
 import numpy as np
+import pandas as pd 
 
 import torch
 from torch import nn
@@ -232,9 +233,6 @@ def train_model(args, model, train_loader, test_loader, epochs, device):
     """
     Trains the model on the provided data loaders.
     """
-  
-    # writer = SummaryWriter(log_dir)
-  
     model.to(device)
 
     loop = TrainingLoop(
@@ -246,7 +244,7 @@ def train_model(args, model, train_loader, test_loader, epochs, device):
         ),
         device=device,
     )
-    fitted = loop.fit(
+    tr_per, te_per = loop.fit(
         train_loader,
         test_loader,
         epochs=args.epochs,
@@ -289,6 +287,9 @@ def train_model(args, model, train_loader, test_loader, epochs, device):
     # checkpoint = {'state_dict': model.state_dict(),'optimizer': optimizer.state_dict()}
     checkpoint = {'state_dict': model.state_dict(),'accuracy': {"train": args.train_acc, "test": args.test_acc}}
     torch.save(checkpoint, os.path.join(log_dir, 'model.pt'))
+    
+    tr_per.to_parquet(os.path.join(log_dir, "train_perfomance.parquet"))
+    te_per.to_parquet(os.path.join(log_dir, "test_perfomance.parquet"))
 
     print(model)
 
