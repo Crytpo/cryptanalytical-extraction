@@ -12,6 +12,12 @@ from torch.optim import Adam
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 
+import keras
+
+from torcheval.metrics import MulticlassAccuracy
+from training_loop import TrainingLoop, SimpleTrainingStep
+from training_loop.callbacks import EarlyStopping
+
 from torch.utils.tensorboard import SummaryWriter
 
 def str2bool(v):
@@ -28,7 +34,7 @@ def str2bool(v):
         raise argparse.ArgumentTypeError('Boolean value expected.')
 
 
-def create_dataloader(batch_size, shuffle=True, num_workers=0):
+def create_dataloader(args, batch_size, shuffle=True, num_workers=0):
     """
     Creates a data loader for the MNIST dataset.
 
@@ -78,6 +84,7 @@ def create_dataloader(batch_size, shuffle=True, num_workers=0):
             transforms.ToTensor(),
             transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
         ])
+
 
         # Load the MNIST dataset
         trainset = datasets.CIFAR10(
@@ -211,76 +218,7 @@ def create_model(args):
             x = x.view(-1, self.img_size**2*self.in_channels)  # Flatten the input tensor
             x = self.model(x)
             return x
-    """
-    # Define input channels based on dataset
-    if args.dataset == 'mnist':
-        img_size = 28
-        in_channels = 1
-    elif args.dataset == 'cifar10':
-        img_size = 32
-        in_channels = 3
-    else:
-        raise NotImplementedError(f"Dataset {args.dataset} not supported")
-
-    # Define layer type and activation function
-    if args.layer_type == 'dense':
-        layer_fn = nn.Linear
-    elif args.layer_type == 'conv2d':
-        layer_fn = nn.Conv2d 
-    else:
-        raise NotImplementedError(f"Layer type {args.layer_type} not supported")
-
-    activation = nn.ReLU()
-
-    # Create model layers
-    layers = []
-
-    # First layer
-    if args.layer_type == 'dense':
-        layers.append(layer_fn(in_channels, args.hidden_size))
-    elif args.layer_type == 'conv2d':
-        layers.append(layer_fn(in_channels, args.hidden_size, kernel_size=args.kernel_size, padding=1))  # Adjust padding as needed
-    else:
-        raise NotImplementedError(f"Layer type {args.layer_type} not supported")
-
-    layers.append(activation)  # Assuming ReLU activation for each layer
-
-    for _ in range(1, args.layer_number):
-        if args.layer_type == 'dense':
-            layers.append(layer_fn(args.hidden_size, args.hidden_size))
-        elif args.layer_type == 'conv2d':
-            layers.append(layer_fn(args.hidden_size, args.hidden_size, kernel_size=args.kernel_size, padding='valid'))
-        layers.append(activation)
-
-    if args.layer_type == 'conv2d':
-        # Flatten and dense layers if specified
-        layers.append(nn.Flatten())
-
-        if args.flattodense:
-            if args.falttodense_size < 0:
-                args.falttodense_size = args.hidden_size
-            layers.append(nn.Linear(img_size**2*args.hidden_size, args.falttodense_size))
-            layers.append(nn.ReLU())  # Assuming ReLU activation
-
-    # Output layer
-    if args.lastactivation == 'softmax':
-        num_classes = 10
-        expected_input_dim = args.falttodense_size if args.flattodense else args.hidden_size
-    else:
-        num_classes = 1 # regression problem
-        expected_input_dim = args.falttodense_size if args.flattodense else img_size**2*args.hidden_size
-
-    print(f"Expected input dimension for the last linear layer: {expected_input_dim}")
-
-    layers.append(nn.Linear(expected_input_dim, num_classes))
-    if args.lastactivation == 'softmax':
-        layers.append(nn.Softmax(dim=1))
-
-    # Construct the model using nn.Sequential
-    model = nn.Sequential(*layers)
-
-    print(model)
-    """
+   
     model = FlexibleNet(args)
     print(model)
     return model
@@ -297,89 +235,109 @@ def train_model(args, model, train_loader, test_loader, epochs, device):
     log_dir = f"models/logs/pt/{args.dataset}/{args.layer_type}/{args.hidden_size}x{args.layer_number}/{args.lastactivation}/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     writer = SummaryWriter(log_dir)
 
+  
     model.to(device)
 
-    # Define the optimizer
-    optimizer = Adam(model.parameters(), lr=args.lr)
 
-    # Define loss function based on last activation
-    if args.lastactivation == 'softmax':
-        loss_fn = nn.CrossEntropyLoss()
+    loop = TrainingLoop(
+        model,
+        step=SimpleTrainingStep(
+            optimizer_fn=lambda params: Adam(params, lr=0.0001),
+            loss=torch.nn.CrossEntropyLoss(),
+            metrics=('accuracy', MulticlassAccuracy(num_classes=10)),
+        ),
+        device=device,
+    )
+    fitted = loop.fit(
+        train_loader,
+        test_loader,
+        epochs=10,
+        callbacks=[
+            EarlyStopping(monitor='val_loss', mode='min', patience=20),
+        ],
+    )
+
+
+    breakpoint()
+
+    # Saving model path modified for MNIST
+    model.save(f"{log_dir}/model.keras")
+
+    # Predict the test set
+    predictions_tr = model.predict(x_train)
+    predictions = model.predict(x_test)
+
+    if  args.lastactivation == 'softmax':
+        # Round predictions to the nearest integer
+        rounded_predictions_tr = np.argmax(predictions_tr, axis=1)
+        rounded_predictions    = np.argmax(predictions, axis=1)
     else:
-        loss_fn = nn.MSELoss() # regression
+        # Round predictions to the nearest integer
+        rounded_predictions_tr = np.round(predictions_tr).astype(int).flatten()
+        rounded_predictions    = np.round(predictions).astype(int).flatten()
 
-    total_step = len(train_loader)
 
-    accuracy_tr = 0
-    accuracy = 0
+    # Calculate accuracy
+    accuracy_tr = np.mean(rounded_predictions_tr == y_train)
+    accuracy    = np.mean(rounded_predictions == y_test)
 
-    # Training loop
-    for epoch in range(epochs):
-        
-        running_loss = 0.0
-        correct = 0
-        total = 0
-        model.train()
-        for i, (data, target) in enumerate(train_loader):
-            data, target = data.to(device), target.to(device)
-            optimizer.zero_grad()
-            output = model(data)
 
-            predicted = torch.argmax(output.data, dim=1) if args.lastactivation == 'softmax' else output.data.squeeze()
 
-            total += target.size(0)
-            if args.lastactivation == 'softmax':
-                correct += (predicted == target).sum().item()
-                metric = 'accuracy'
-                metric_tmp = '%'
-            else:
-                # Calculate Mean Absolute Error (MAE)
-                target = target.float()
-                output = output.squeeze()
-                correct += mae(predicted, target)
-                metric = 'MAE'
-                metric_tmp = '%'
+        #     predicted = torch.argmax(output.data, dim=1) if args.lastactivation == 'softmax' else output.data.squeeze()
 
-            loss = loss_fn(output, target)
+        #     total += target.size(0)
+        #     if args.lastactivation == 'softmax':
+        #         correct += (predicted == target).sum().item()
+        #         metric = 'accuracy'
+        #         metric_tmp = '%'
+        #     else:
+        #         # Calculate Mean Absolute Error (MAE)
+        #         target = target.float()
+        #         output = output.squeeze()
+        #         correct += mae(predicted, target)
+        #         metric = 'MAE'
+        #         metric_tmp = '%'
 
-            loss.backward()
-            optimizer.step()
+        #     loss = loss_fn(output, target)
 
-            running_loss += loss.item()
+        #     loss.backward()
+        #     optimizer.step()
 
-        accuracy_tr = 100 * correct / total if args.lastactivation == 'softmax' else (1 - (correct / total)) * 100
+        #     running_loss += loss.item()
 
-        writer.add_scalar('Loss/train', running_loss, epoch * total_step + i)
-        writer.add_scalar(f'{metric}/train: ', accuracy_tr, epoch * total_step + i)
-        print(f'Training: Epoch [{epoch+1}/{epochs}], Step [{i+1}/{len(train_loader)}], Loss: {running_loss/100:.4f}, {metric}: {accuracy_tr:.2f}{metric_tmp}')
-        running_loss = 0.0
+        # accuracy_tr = 100 * correct / total if args.lastactivation == 'softmax' else (1 - (correct / total)) * 100
 
-        # Testing loop
-        model.eval()
-        with torch.no_grad():
-            correct = 0
-            total = 0
-            for batch_idx, (data, target) in enumerate(test_loader):
-                data, target = data.to(device), target.to(device)
-                output = model(data)
-                predicted = torch.argmax(output.data, dim=1) if args.lastactivation == 'softmax' else output.data.squeeze()
+        # writer.add_scalar('Loss/train', running_loss, epoch * total_step + step)
+        # writer.add_scalar(f'{metric}/train: ', accuracy_tr, epoch * total_step + step)
+        # print(f'Training: Epoch [{epoch+1}/{epochs}], Step [{step+1}/{len(train_loader)}], Loss: {running_loss/100:.4f}, {metric}: {accuracy_tr:.2f}{metric_tmp}')
+        # running_loss = 0.0
 
-                total += target.size(0)
-                if args.lastactivation == 'softmax':
-                    correct += (predicted == target).sum().item()
-                    metric = 'accuracy'
-                    metric_tmp = '%'
-                else:
-                    target = target.float()
-                    correct += mae(predicted, target)
-                    metric = 'MAE'
-                    metric_tmp = '%'
+        # # Testing loop
+        # model.eval()
+        # with torch.no_grad():
+        #     correct = 0
+        #     total = 0
+        #     for batch_idx, (data, target) in enumerate(test_loader):
+        #         data, target = data.to(device), target.to(device)
+        #         output = model(data)
+        #         predicted = torch.argmax(output.data, dim=1) if args.lastactivation == 'softmax' else output.data.squeeze()
+
+        #         total += target.size(0)
+        #         if args.lastactivation == 'softmax':
+        #             correct += (predicted == target).sum().item()
+        #             metric = 'accuracy'
+        #             metric_tmp = '%'
+        #         else:
+        #             target = target.float()
+        #             correct += mae(predicted, target)
+        #             metric = 'MAE'
+        #             metric_tmp = '%'
             
-            accuracy = 100 * correct / total if args.lastactivation == 'softmax' else (1 - (correct / total)) * 100
+        #     accuracy = 100 * correct / total if args.lastactivation == 'softmax' else (1 - (correct / total)) * 100
 
-            print(f"Validation: Epoch {epoch+1} - {metric}: {accuracy:.2f}{metric_tmp}")
-            if (batch_idx+1) % 100 == 0:
-                writer.add_scalar(f'{metric}/test', accuracy, epoch * len(test_loader) + batch_idx)
+        #     print(f"Validation: Epoch {epoch+1} - {metric}: {accuracy:.2f}{metric_tmp}")
+        #     if (batch_idx+1) % 100 == 0:
+        #         writer.add_scalar(f'{metric}/test', accuracy, epoch * len(test_loader) + batch_idx)
 
     print('Finished Training. Save data ...')
     print('Log dir', log_dir)
@@ -447,6 +405,6 @@ if __name__ == '__main__':
     print(args)
 
     model = create_model(args)
-    train_loader, test_loader = create_dataloader(batch_size=args.bs)
+    train_loader, test_loader = create_dataloader(args, batch_size=args.bs)
 
     train_model(args, model, train_loader, test_loader, epochs=args.epochs, device="cuda")

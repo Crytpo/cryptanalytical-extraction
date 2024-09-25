@@ -143,7 +143,6 @@ def make_new_models(args):
         rounded_predictions_tr = np.round(predictions_tr).astype(int).flatten()
         rounded_predictions    = np.round(predictions).astype(int).flatten()
 
-
     # Calculate accuracy
     accuracy_tr = np.mean(rounded_predictions_tr == y_train)
     accuracy    = np.mean(rounded_predictions == y_test)
