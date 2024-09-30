@@ -245,7 +245,7 @@ def create_model(args):
 
                 layers.append(activation)
 
-                # Intermediate layers
+                # Hidden layers
                 for _ in range(1, args.layer_number):
                     if args.layer_type == 'dense':
                         layers.append(layer_fn(args.hidden_size, args.hidden_size))
