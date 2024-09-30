@@ -8,7 +8,7 @@
     "falttodense_size": -1,
     "lastactivation": "softmax",
     "epochs": 100,
-    "bs": 64,
+    "bs": 1024,
     "seed": 42,
     "load_json": ""
 }

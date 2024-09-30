@@ -44,5 +44,25 @@
                 "--load_json", "scripts/mnist/cnn/8x1_fc_linear.json" 
             ]
         },
+        {
+            "name": "pt-keras-like custom vgg",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "models/train_new_models_pt_keras_like.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--load_json", "scripts/cifar10/custom/VGG_5_softmax.json" 
+            ]
+        },
+        {
+            "name": "pt-ktorch custom vgg",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "models/train_new_models_pt_pytorch_toolkit.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--load_json", "scripts/cifar10/custom/VGG_5_softmax.json" 
+            ]
+        },
     ]
 }

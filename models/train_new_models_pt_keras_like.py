@@ -17,9 +17,12 @@ import keras
 
 from torcheval.metrics import MulticlassAccuracy
 from training_loop import TrainingLoop, SimpleTrainingStep
-from training_loop.callbacks import EarlyStopping
+from training_loop.callbacks import EarlyStopping, TensorBoardLogger, ModelCheckpoint
+import torchmetrics.functional as tmf
 
 from torch.utils.tensorboard import SummaryWriter
+from torchsummary import summary
+
 
 def str2bool(v):
     """
@@ -33,6 +36,7 @@ def str2bool(v):
         return False
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
+
 
 
 def create_dataloader(args, batch_size, shuffle=True, num_workers=0):
@@ -109,6 +113,51 @@ def create_dataloader(args, batch_size, shuffle=True, num_workers=0):
     return trainloader, testloader
 
 
+def predict(model, data_loader, num_classes=10, task='MULTICLASS'):
+    model.eval()
+    predictions = []
+    targets = []
+
+    for data, target in data_loader:
+        data = data.cuda()
+        target = target.cuda()
+
+        # Forward pass
+        with torch.no_grad():
+            output = model(data)
+        
+        # Accumulate predictions and targets
+        predictions.append(output)
+        targets.append(target)
+
+    # Concatenate predictions and targets
+    predictions = torch.cat(predictions, dim=0)
+    targets = torch.cat(targets, dim=0)
+
+    # Calculate accuracy
+    accuracy = tmf.accuracy(predictions, targets, task=task, num_classes=num_classes).item()*100
+    print(f"Prediction accuracy: {accuracy:.2f}%")
+
+    # # Predict the test set
+    # predictions_tr, y_train = calculate_prediction(model, train_loader)
+    # predictions, y_test  = calculate_prediction(model, test_loader)
+
+    # if  args.lastactivation == 'softmax' or args.layers[-1]['activation'] == 'softmax':
+    #     # Round predictions to the nearest integer
+    #     rounded_predictions_tr = np.argmax(predictions_tr, axis=1)
+    #     rounded_predictions    = np.argmax(predictions, axis=1)
+    # else:
+    #     # Round predictions to the nearest integer
+    #     rounded_predictions_tr = np.round(predictions_tr).astype(int).flatten()
+    #     rounded_predictions    = np.round(predictions).astype(int).flatten()
+
+    # # Calculate accuracy
+    # accuracy_tr = (rounded_predictions_tr == y_train).float().mean()
+    # accuracy    = (rounded_predictions == y_test).float().mean()
+
+    return accuracy
+
+
 def calculate_prediction(model, dataloader, device='cuda'):
     model.eval()  # Set the model to evaluation mode
     
@@ -132,6 +181,8 @@ def create_model(args):
         def __init__(self, args):
             super(FlexibleNet, self).__init__()
 
+            self.args = args
+
             # Define input channels based on dataset
             if args.dataset == 'mnist':
                 self.img_size = 28
@@ -144,7 +195,6 @@ def create_model(args):
 
             layers = []
             activation = nn.ReLU()  # Assuming ReLU activation for each layer
-
             layer_fn = nn.Linear
 
             if len(args.layers) > 0: # Custom Network
@@ -157,23 +207,25 @@ def create_model(args):
                             layers.append(layer_fn(self.img_size**2*self.in_channels, layer['hidden_size']))
                         else:
                             layers.append(layer_fn(args.layers[i-1]['hidden_size'], layer['hidden_size']))
+                        layers.append(activation)
 
                     elif layer['layer_type'] == 'conv2d':
                         layer_fn = nn.Conv2d
                         if i == 0:
-                            layers.append(layer_fn(self.img_size**2*self.in_channels, layer['hidden_size'], kernel_size=layer['kernel_size'], padding='valid')) 
+                            layers.append(layer_fn(self.in_channels, layer['hidden_size'], kernel_size=layer['kernel_size'], padding='valid')) 
                         else:
                             layers.append(layer_fn(args.layers[i-1]['hidden_size'], layer['hidden_size'], kernel_size=layer['kernel_size'], padding='valid')) 
-
+                        layers.append(activation)
 
                     elif layer['layer_type'] == 'avgpooling':
                         layer_fn = nn.AvgPool2d
-                        layers.append(layer_fn(args.layers[i]['kernel_size'], padding=1))
+                        layers.append(layer_fn(args.layers[i]['kernel_size'], args.layers[i]['stride'],  padding=1))
+
+                    elif layer['layer_type'] == 'flatten':
+                        layers.append(nn.Flatten())
 
                     if i == len(args.layers)-1:
-                        activation = nn.Softmax(dim=-1) 
-
-                    layers.append(activation)
+                        activation = nn.Softmax(dim=-1)
             else:   # Foerster's implementation 
                 # Define layer type and activation function
                 if args.layer_type == 'dense':
@@ -206,8 +258,9 @@ def create_model(args):
                     num_classes = 10
                     expected_input_dim = args.falttodense_size if args.flattodense else args.hidden_size
                 else:
-                    num_classes = 1 # regression problem
+                    num_classes = 1 # regression
                     expected_input_dim = args.falttodense_size if args.flattodense else self.img_size**2*args.hidden_size
+                breakpoint()
                 layers.append(nn.Linear(expected_input_dim, num_classes))
 
                 if args.lastactivation == 'softmax':
@@ -216,29 +269,50 @@ def create_model(args):
             self.model = nn.Sequential(*layers)
 
         def forward(self, x):
-            x = x.view(-1, self.img_size**2*self.in_channels)  # Flatten the input tensor
+            if self.args.layer_type == 'dense':
+                x = x.view(-1, self.img_size**2*self.in_channels)  # Flatten the input tensor
+            
+            for i, layer in enumerate(self.model):
+                x = layer(x)
+                print(f"Layer {i}: {x.shape}") 
+            
             x = self.model(x)
+
             return x
    
     model = FlexibleNet(args)
+
+    # import vgg
+    # model = vgg.__dict__['vgg11']()
+
     print(model)
+    summary(model)
+    # summary(model, torch.randn(2, 1, 32, 32))
+
     return model
 
 
-def mae(predicted, target):
-    return torch.mean(torch.abs(predicted - target)).item()
-
-
-def train_model(args, model, train_loader, test_loader, epochs, device):
+def train_model(args, model, train_loader, test_loader, device):
     """
     Trains the model on the provided data loaders.
     """
-    model.to(device)
+    log_dir = f"models/logs/pt/{args.dataset}/{args.layer_type}/{args.hidden_size}x{args.layer_number}/{args.lastactivation}/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    os.makedirs(log_dir, exist_ok=True)
+    print('Log dir', log_dir)
+
+    tbCallBack = TensorBoardLogger(log_dir, update_freq=5, update_freq_unit="epoch")
+    ckptCallBack = ModelCheckpoint(
+        os.path.join(log_dir, "best_model.pt"),
+        save_weights_only=True,
+        save_best_only=True,
+        monitor="loss",
+        mode="min",
+    )
 
     loop = TrainingLoop(
         model,
         step=SimpleTrainingStep(
-            optimizer_fn=lambda params: Adam(params, lr=0.0001),
+            optimizer_fn=lambda params: Adam(params, lr=0.001),
             loss=torch.nn.CrossEntropyLoss(),
             metrics=('accuracy', MulticlassAccuracy(num_classes=10)),
         ),
@@ -249,36 +323,21 @@ def train_model(args, model, train_loader, test_loader, epochs, device):
         test_loader,
         epochs=args.epochs,
         callbacks=[
-            EarlyStopping(monitor='val_loss', mode='min', patience=20),
+            EarlyStopping(monitor='val_loss', mode='min', patience=15),
+            tbCallBack,
+            ckptCallBack
         ],
+        verbose=2
     )
 
-    # Predict the test set
-    predictions_tr, y_train = calculate_prediction(model, train_loader)
-    predictions, y_test  = calculate_prediction(model, test_loader)
+    accuracy_tr = predict(args, model, train_loader)
+    accuracy    = predict(args, model, test_loader)
 
-    if  args.lastactivation == 'softmax' or args.layers[-1]['activation'] == 'softmax':
-        # Round predictions to the nearest integer
-        rounded_predictions_tr = np.argmax(predictions_tr, axis=1)
-        rounded_predictions    = np.argmax(predictions, axis=1)
-    else:
-        # Round predictions to the nearest integer
-        rounded_predictions_tr = np.round(predictions_tr).astype(int).flatten()
-        rounded_predictions    = np.round(predictions).astype(int).flatten()
+    print(f"Accuracy: {accuracy_tr:.2f}%, {accuracy:.2f}%")
+    print('Finished Training. Save data args ...')
 
-    # Calculate accuracy
-    accuracy_tr = (rounded_predictions_tr == y_train).float().mean()
-    accuracy    = (rounded_predictions == y_test).float().mean()
-
-    print(f"Accuracy: {accuracy_tr * 100:.2f}%, {accuracy * 100:.2f}%")
-
-    log_dir = f"models/logs/pt/{args.dataset}/{args.layer_type}/{args.hidden_size}x{args.layer_number}/{args.lastactivation}/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
-    os.makedirs(log_dir, exist_ok=True)
-    print('Finished Training. Save data ...')
-    print('Log dir', log_dir)
-
-    args.train_acc = accuracy_tr.item()
-    args.test_acc = accuracy.item()
+    args.train_acc = accuracy_tr
+    args.test_acc = accuracy
     args_dict = copy.deepcopy(vars(args))
     with open(os.path.join(log_dir, 'args.json'), 'w') as fp:
         json.dump(args_dict, fp, indent=4)
@@ -292,6 +351,8 @@ def train_model(args, model, train_loader, test_loader, epochs, device):
     te_per.to_parquet(os.path.join(log_dir, "test_perfomance.parquet"))
 
     print(model)
+    print("finished!")
+    print(f"all saved under '{log_dir}'")
 
 
 if __name__ == '__main__':
@@ -302,6 +363,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Create model')
     parser.add_argument('--dataset', default="mnist", choices=['mnist', 'cifar10'], type=str, help='')
     parser.add_argument('--layer_type', default="dense", choices=['dense', 'conv2d'], type=str, help='')
+    parser.add_argument('--layers', default=[], type=list, help='')
     parser.add_argument('--hidden_size', default=8, type=int, help='')
     parser.add_argument('--layer_number', default=1, type=int, help='')
     parser.add_argument('--kernel_size', default=3, type=int, help='')
@@ -322,10 +384,9 @@ if __name__ == '__main__':
             json_data = json.load(f)
             args.__dict__.update(json_data)
 
-    #args.epochs = 1
     print(args)
 
     model = create_model(args)
     train_loader, test_loader = create_dataloader(args, batch_size=args.bs)
 
-    train_model(args, model, train_loader, test_loader, epochs=args.epochs, device="cuda")
+    train_model(args, model, train_loader, test_loader, device="cuda")
