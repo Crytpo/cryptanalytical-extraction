@@ -66,6 +66,16 @@
             ]
         },
         {
+            "name": "dense 8x2 linear",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "models/train_new_models_pt_keras_like.py",
+            "console": "integratedTerminal",
+            "args": [
+                "--load_json", "scripts/mnist/dense/8x2_linear.json" 
+            ]
+        },
+        {
             "name": "pt-keras-like custom vgg",
             "type": "debugpy",
             "request": "launch",
