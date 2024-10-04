@@ -1,0 +1,51 @@
+{
+  "dataset": "mnist",
+  "layer_type": "custom",
+  "layers": [
+    {
+      "name": 0,
+      "layer_type": "conv2d",
+      "hidden_size": 64,
+      "kernel_size": 3,
+      "activation": "relu"
+    },
+    {
+      "name": 1,
+      "layer_type": "avgpooling",
+      "hidden_size": 64,
+      "kernel_size": 2,
+      "stride": 2
+    },
+    {
+      "name": 0,
+      "layer_type": "conv2d",
+      "hidden_size": 128,
+      "kernel_size": 3,
+      "activation": "relu"
+    },
+    {
+      "name": 1,
+      "layer_type": "avgpooling",
+      "hidden_size": 128,
+      "kernel_size": 2,
+      "stride": 2
+    },
+    {
+      "name": 1,
+      "layer_type": "flatten",
+      "hidden_size": 8192
+    },
+    {
+      "name": 4,
+      "layer_type": "dense",
+      "hidden_size": 1,
+      "activation": "linear"
+    }
+  ],
+  "lastactivation": "linear",
+  "epochs": 100,
+  "bs": 1024,
+  "lr": 0.001,
+  "seed": 42,
+  "load_json": ""
+}
