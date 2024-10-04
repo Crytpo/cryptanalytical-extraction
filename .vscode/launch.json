@@ -1,99 +1,110 @@
 {
-    // Use IntelliSense to learn about possible attributes.
-    // Hover to view descriptions of existing attributes.
-    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
-    "version": "0.2.0",
-    "configurations": [
-
-        {
-            "name": "wiggle softmax 1",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "neuronWiggle.py",
-            "console": "integratedTerminal",
-            "args": [
-                "--model", "models/mnist784_15x2_softmax1_1v2.keras", "--layerID", "1", "--seed", "20", "--dataset", "'mnist'", "--quantized", "2" 
-            ]
-        },
-        {
-            "name": "wiggle softmax 2",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "neuronWiggle.py",
-            "console": "integratedTerminal",
-            "args": [
-                "--model", "models/mnist784_15x2_softmax2_1v2.keras", "--layerID", "1", "--seed", "20", "--dataset", "'mnist'", "--quantized", "2" 
-            ]
-        },
-        {
-            "name": "train model",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "models/train_new_models.py",
-            "console": "integratedTerminal",
-            "args": [
-                "--load_json", "scripts/mnist/dense/8x1_softmax.json" 
-            ]
-        },
-        {
-            "name": "pt train cnn",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "models/train_new_models_pt.py",
-            "console": "integratedTerminal",
-            "args": [
-                "--load_json", "scripts/mnist/cnn/8x1_fc_linear.json" 
-            ]
-        },
-        {
-            "name": "dense 8x1 softmax",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "models/train_new_models_pt_keras_like.py",
-            "console": "integratedTerminal",
-            "args": [
-                "--load_json", "scripts/mnist/dense/8x1_softmax.json" 
-            ]
-        },
-        {
-            "name": "dense 8x1 linear",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "models/train_new_models_pt_keras_like.py",
-            "console": "integratedTerminal",
-            "args": [
-                "--load_json", "scripts/mnist/dense/8x1_linear.json" 
-            ]
-        },
-        {
-            "name": "dense 8x2 linear",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "models/train_new_models_pt_keras_like.py",
-            "console": "integratedTerminal",
-            "args": [
-                "--load_json", "scripts/mnist/dense/8x2_linear.json" 
-            ]
-        },
-        {
-            "name": "pt-keras-like custom vgg",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "models/train_new_models_pt_keras_like.py",
-            "console": "integratedTerminal",
-            "args": [
-                "--load_json", "scripts/cifar10/custom/VGG_5_softmax.json" 
-            ]
-        },
-        {
-            "name": "pt-ktorch custom vgg",
-            "type": "debugpy",
-            "request": "launch",
-            "program": "models/train_new_models_pt_pytorch_toolkit.py",
-            "console": "integratedTerminal",
-            "args": [
-                "--load_json", "scripts/cifar10/custom/VGG_5_softmax.json" 
-            ]
-        },
-    ]
+  // Use IntelliSense to learn about possible attributes.
+  // Hover to view descriptions of existing attributes.
+  // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "wiggle softmax 1",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "neuronWiggle.py",
+      "console": "integratedTerminal",
+      "args": [
+        "--model",
+        "models/mnist784_15x2_softmax1_1v2.keras",
+        "--layerID",
+        "1",
+        "--seed",
+        "20",
+        "--dataset",
+        "'mnist'",
+        "--quantized",
+        "2"
+      ]
+    },
+    {
+      "name": "wiggle softmax 2",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "neuronWiggle.py",
+      "console": "integratedTerminal",
+      "args": [
+        "--model",
+        "models/mnist784_15x2_softmax2_1v2.keras",
+        "--layerID",
+        "1",
+        "--seed",
+        "20",
+        "--dataset",
+        "'mnist'",
+        "--quantized",
+        "2"
+      ]
+    },
+    {
+      "name": "train model",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "models/train_new_models.py",
+      "console": "integratedTerminal",
+      "args": ["--load_json", "scripts/mnist/dense/8x1_softmax.json"]
+    },
+    {
+      "name": "pt train cnn",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "models/train_new_models_pt.py",
+      "console": "integratedTerminal",
+      "args": ["--load_json", "scripts/mnist/cnn/8x1_fc_linear.json"]
+    },
+    {
+      "name": "dense 8x1 softmax",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "models/train_new_models_pt.py",
+      "console": "integratedTerminal",
+      "args": ["--load_json", "scripts/mnist/dense/8x1_softmax.json"]
+    },
+    {
+      "name": "dense 8x1 linear",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "models/train_new_models_pt.py",
+      "console": "integratedTerminal",
+      "args": ["--load_json", "scripts/mnist/dense/8x1_linear.json"]
+    },
+    {
+      "name": "dense 8x2 linear",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "models/train_new_models_pt.py",
+      "console": "integratedTerminal",
+      "args": ["--load_json", "scripts/mnist/dense/8x2_linear.json"]
+    },
+    {
+      "name": "pt-keras-like custom vgg",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "models/train_new_models_pt.py",
+      "console": "integratedTerminal",
+      "args": ["--load_json", "scripts/cifar10/custom/VGG_5_softmax.json"]
+    },
+    {
+      "name": "pt-ktorch custom vgg",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "models/train_new_models_pt_pytorch_toolkit.py",
+      "console": "integratedTerminal",
+      "args": ["--load_json", "scripts/cifar10/custom/VGG_5_softmax.json"]
+    },
+    {
+      "name": "mnist custom ",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "models/train_new_models_pt.py",
+      "console": "integratedTerminal",
+      "args": ["--load_json", "scripts/mnist/custom/FCNN_4_softmax.json"]
+    }
+  ]
 }

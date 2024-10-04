@@ -1,13 +1,14 @@
 {
-    "dataset": "mnist",
-    "layer_type": "dense",
-    "hidden_size": 8,
-    "layer_number": 1,
-    "flattodense": false,
-    "falttodense_size": -1,
-    "lastactivation": "linear",
-    "epochs": 100,
-    "bs": 1024,
-    "seed": 42,
-    "load_json": ""
+  "dataset": "mnist",
+  "layer_type": "dense",
+  "hidden_size": 8,
+  "layer_number": 1,
+  "flattodense": false,
+  "falttodense_size": -1,
+  "lastactivation": "linear",
+  "epochs": 100,
+  "bs": 1024,
+  "seed": 42,
+  "device": "cuda",
+  "load_json": ""
 }

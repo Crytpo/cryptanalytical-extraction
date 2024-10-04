@@ -23,7 +23,7 @@ from torchmetrics import MeanAbsoluteError
 from torch.utils.tensorboard import SummaryWriter
 from torchsummary import summary
 
-import logging
+# import logging
 # torch._logging.set_logs(
 #     all=logging.DEBUG, 
 #     output_code=True, 
@@ -34,9 +34,8 @@ import logging
 import torch.autograd.profiler as profiler
 # https://pytorch.org/docs/stable/bottleneck.html
 
-
 dataset_config = {
-    'mnist': {'img_size': 28, 'in_channels': 1, 'classes': 10},
+    'mnist':   {'img_size': 28, 'in_channels': 1, 'classes': 10},
     'cifar10': {'img_size': 32, 'in_channels': 3, 'classes': 10}
 }
 
@@ -72,8 +71,8 @@ def create_dataloader(args, batch_size, shuffle=True, num_workers=0):
         # Define transformations
         transform = [
             transforms.ToTensor(),
-            # transforms.Normalize((0.1307,), (0.3081,))
-            transforms.Normalize((0.5,), (0.5,))
+            transforms.Normalize((0.1307,), (0.3081,))
+            # transforms.Normalize((0.5,), (0.5,))
         ]
         transform = transforms.Compose(transform)
 
@@ -107,8 +106,7 @@ def create_dataloader(args, batch_size, shuffle=True, num_workers=0):
                     return img, target     
                 
             trainset = CustomMNISTDataset("/data", train=True, transform=transform)
-            testset = CustomMNISTDataset("/data", train=False, transform=transform)
-
+            testset  = CustomMNISTDataset("/data", train=False, transform=transform)
 
 
     elif args.dataset == 'cifar10':
@@ -125,7 +123,6 @@ def create_dataloader(args, batch_size, shuffle=True, num_workers=0):
             transforms.ToTensor(),
             transforms.Normalize((0.4914, 0.4822, 0.4465), (0.2023, 0.1994, 0.2010))
         ])
-
 
         # Load the MNIST dataset
         trainset = datasets.CIFAR10(
@@ -155,8 +152,8 @@ def predict(args, model, data_loader, num_classes=10, task='MULTICLASS'):
     targets = []
 
     for data, target in data_loader:
-        data = data.cuda()
-        target = target.cuda()
+        data = data.to(args.device)
+        target = target.to(args.device)
 
         # Forward pass
         with torch.no_grad():
@@ -170,7 +167,7 @@ def predict(args, model, data_loader, num_classes=10, task='MULTICLASS'):
     predictions = torch.cat(predictions, dim=0).cpu()
     targets = torch.cat(targets, dim=0).cpu()
 
-    if args.lastlayer == 'softmax':
+    if args.lastactivation == 'softmax':
         # Calculate accuracy
         accuracy = tmf.accuracy(predictions, targets, task=task, num_classes=num_classes).item()*100
         print(f"Prediction accuracy: {accuracy:.2f}%")
@@ -178,10 +175,11 @@ def predict(args, model, data_loader, num_classes=10, task='MULTICLASS'):
         # regression
         predictions = predictions.round().int()
         targets = targets.int()
-        accuracy = MeanAbsoluteError()(predictions, targets)
+        accuracy = MeanAbsoluteError()(predictions, targets).item()
         print(f"Prediction accuracy: {accuracy:.4f} MAE")
-        accuracy2 = (predictions == targets).float().mean()*100
+        accuracy2 = (predictions == targets).float().mean().item()*100
         print(f"Prediction accuracy: {accuracy2:.2f} %")
+        accuracy = accuracy2
 
     return accuracy
 
@@ -205,22 +203,20 @@ def create_model(args):
     """
     Creates a model based on the provided arguments.
     """
-    class SimpleNN(nn.Module):
-        def __init__(self, args):
-            super(SimpleNN, self).__init__()
+    if len(args.layers) > 0: # Custom Network
+        # Define input channels based on dataset
+        class CustomNN(nn.Module):
+            def __init__(self, args):
+                super(CustomNN, self).__init__()
 
-            self.args = args
+                self.args = args
+                self.img_size = dataset_config[args.dataset]['img_size']
+                self.in_channels = dataset_config[args.dataset]['in_channels']
 
-            # Define input channels based on dataset
-            self.img_size = dataset_config[args.dataset]['img_size']
-            self.in_channels = dataset_config[args.dataset]['in_channels']
-
-            layers = []
-            activation = nn.ReLU()  # Assuming ReLU activation for each layer
-            layer_fn = nn.Linear
-
-            if len(args.layers) > 0: # Custom Network
-                ic("custom layer")
+                layers = []
+                activation = nn.ReLU() # Assuming ReLU activation for each layer
+                layer_fn = nn.Linear
+                ic("custom network")
                 for i, layer in enumerate(args.layers):
                     if layer['layer_type'] == 'dense':
                         layer_fn = nn.Linear
@@ -229,15 +225,19 @@ def create_model(args):
                             layers.append(layer_fn(self.img_size**2*self.in_channels, layer['hidden_size']))
                         else:
                             layers.append(layer_fn(args.layers[i-1]['hidden_size'], layer['hidden_size']))
-                        layers.append(activation)
+                        
+                        if not i == len(args.layers) - 1:
+                            layers.append(activation)
 
                     elif layer['layer_type'] == 'conv2d':
                         layer_fn = nn.Conv2d
                         if i == 0:
-                            layers.append(layer_fn(self.in_channels, layer['hidden_size'], kernel_size=layer['kernel_size'], padding='valid')) 
+                            layers.append(layer_fn(self.in_channels, layer['hidden_size'], kernel_size=layer['kernel_size'], padding=1)) 
                         else:
-                            layers.append(layer_fn(args.layers[i-1]['hidden_size'], layer['hidden_size'], kernel_size=layer['kernel_size'], padding='valid')) 
-                        layers.append(activation)
+                            layers.append(layer_fn(args.layers[i-1]['hidden_size'], layer['hidden_size'], kernel_size=layer['kernel_size'], padding=1)) 
+
+                        if not i == len(args.layers) - 1:
+                            layers.append(activation)
 
                     elif layer['layer_type'] == 'avgpooling':
                         layer_fn = nn.AvgPool2d
@@ -246,74 +246,112 @@ def create_model(args):
                     elif layer['layer_type'] == 'flatten':
                         layers.append(nn.Flatten())
 
-            else:   # Foerster's implementation 
-                # Define layer type and activation function
-                if args.layer_type == 'dense':
-                    layer_fn = nn.Linear
-                elif args.layer_type == 'conv2d':
-                    layer_fn = nn.Conv2d 
-                else:
-                    raise NotImplementedError(f"Layer type {args.layer_type} not supported")
+                self.model = nn.Sequential(*layers)
+
+            def forward(self, x):
+                if self.args.layers[0]['layer_type'] == 'dense':
+                    x = torch.flatten(x, start_dim=1)
+
+                x = self.model(x)
+
+                if not self.args.lastactivation == 'softmax':
+                    x = x.squeeze()
+                    
+                return x
+            
+        model = CustomNN(args)
+            
+    else:
+        if args.layer_type == 'dense':
+            class MLP(nn.Module):
+                def __init__(self, args, hidden_size, layer_number):
+                    super(MLP, self).__init__()
+                    self.img_size = dataset_config[args.dataset]['img_size']
+                    self.in_channels = dataset_config[args.dataset]['in_channels']
+                    self.layers = nn.ModuleList()
+                    self.layers.append(nn.Linear(self.img_size**2*self.in_channels, hidden_size))
+                    for _ in range(1, layer_number):
+                        self.layers.append(nn.Linear(hidden_size, hidden_size))
+
+                    if args.lastactivation == 'linear':
+                        self.output = nn.Linear(hidden_size, 1)  # Output layer for regression-like approach
+                    else:
+                        self.output = nn.Linear(hidden_size, dataset_config[args.dataset]['classes']) 
+                    
+                def forward(self, x):
+                    x = torch.flatten(x, start_dim=1)
+                    for layer in self.layers:
+                        x = torch.relu(layer(x))
+                    
+                    if not self.args.lastactivation == 'softmax':
+                        out = x.squeeze()
+                    
+                    return out
                 
-                # First layer
-                if args.layer_type == 'dense':
-                    layers.append(layer_fn(in_features=self.img_size**2*self.in_channels, out_features=args.hidden_size))
-                elif args.layer_type == 'conv2d':
-                    layers.append(layer_fn(self.in_channels, args.hidden_size, kernel_size=args.kernel_size, padding='valid')) 
-                else:
-                    raise NotImplementedError(f"Layer type {args.layer_type} not supported")
+            model = MLP(args, args.hidden_size, args.layer_number)
+    
+        elif args.layer_type == 'conv2d':
+            class MLP(nn.Module):
+                def __init__(self, args, hidden_size, layer_number):
+                    super(MLP, self).__init__()
+                    self.img_size = dataset_config[args.dataset]['img_size']
+                    self.in_channels = dataset_config[args.dataset]['in_channels']
+                    self.layers = nn.ModuleList()
+                    self.layers.append(nn.Conv2d(self.in_channels, hidden_size, kernel_size=args.kernel_size, padding=1))
+                    for _ in range(1, layer_number):
+                        self.layers.append(nn.Conv2d(hidden_size, hidden_size, kernel_size=args.kernel_size, padding=1))
 
-                layers.append(activation)
+                    # if args.flattodense:
+                    # expected_input_dim = args.falttodense_size if args.flattodense else args.hidden_size*self.img_size**2
+                    self.flatten = nn.Flatten()
+                    
+                    expected_input_dim = hidden_size*self.img_size**2
+                    if args.flattodense:
+                        expected_output_dim = args.falttodense_size if args.falttodense_size > 0 else hidden_size
+                        self.flattodense_layer = nn.Linear(expected_input_dim, expected_output_dim)
+                        expected_input_dim = expected_output_dim
 
-                # Hidden layers
-                for _ in range(1, args.layer_number):
-                    if args.layer_type == 'dense':
-                        layers.append(layer_fn(in_features=args.hidden_size, out_features=args.hidden_size))
-                    elif args.layer_type == 'conv2d':
-                        layers.append(layer_fn(args.hidden_size, args.hidden_size, kernel_size=args.kernel_size, padding='valid'))
-                    layers.append(activation)
+                    if args.lastactivation == 'linear':
+                        self.output = nn.Linear(expected_input_dim, 1)  # Output layer for regression-like approach
+                    else:
+                        self.output = nn.Linear(expected_input_dim, dataset_config[args.dataset]['classes'])
 
-                # Output layer
-                if args.lastactivation == 'softmax': 
-                    # classification
-                    num_classes = dataset_config[args.dataset]['classes']
-                    expected_input_dim = args.falttodense_size if args.flattodense else args.hidden_size
-                else:
-                    # regression
-                    num_classes = 1
-                    expected_input_dim = args.falttodense_size if args.flattodense else args.hidden_size
-                    # expected_input_dim = args.falttodense_size if args.flattodense else self.img_size**2*args.hidden_size
+                def forward(self, x):
+                    for layer in self.layers:
+                        x = torch.relu(layer(x))
+                    
+                    x = self.flatten(x) 
 
-                layers.append(nn.Linear(in_features=expected_input_dim, out_features=num_classes))
+                    if args.flattodense:
+                        x = torch.relu(self.flattodense_layer(x))
 
-                ## no softmax because softmax is implicit in the cross entropy loss
-                # if args.lastactivation == 'softmax':
-                #     # creating probabilities per class
-                #     layers.append(nn.Softmax(dim=1))
+                    if args.lastactivation == 'linear':
+                        out = self.output(x).squeeze()  # Output layer for regression-like approach
+                    else:
+                        out = self.output(x)
+                    
+                    return out
+                
+            model = MLP(args, args.hidden_size, args.layer_number)
+    
+    # Initialize weights
+    def init_weights(m):
+        if isinstance(m, nn.Linear) or isinstance(m, nn.Conv2d):
+            # nn.init.xavier_uniform_(m.weight)
+            # m.bias.data.fill_(0.0)
+            nn.init.kaiming_normal_(m.weight, mode='fan_in', nonlinearity='relu')
+            m.bias.data.fill_(0.01)
 
-            self.model = nn.Sequential(*layers)
+    model.apply(init_weights)
 
-
-        def forward(self, x):
-            if self.args.layer_type == 'dense':
-                x = torch.flatten(x, start_dim=1)
-
-            x = self.model(x)
-
-            if not self.args.lastactivation == 'softmax':
-                x = x.squeeze()
-            return x
-   
-    model = SimpleNN(args)
-
-    ic(model)
-    # summary(model)
+    print(model)
+    summary(model)
     summary(model, torch.randn(args.bs, model.in_channels, model.img_size, model.img_size))
 
     return model
 
 
-def train_model(args, model, train_loader, test_loader, device):
+def train_model(args, model, train_loader, test_loader):
     """
     Trains the model on the provided data loaders.
     """
@@ -329,7 +367,6 @@ def train_model(args, model, train_loader, test_loader, device):
         monitor="loss",
         mode="min",
     )
-
     # predict(args, model, train_loader) # debug
 
     if args.lastactivation == 'softmax':
@@ -337,10 +374,10 @@ def train_model(args, model, train_loader, test_loader, device):
             model,
             step=SimpleTrainingStep(
                 optimizer_fn=lambda params: Adam(params, lr=args.lr),
-                loss=torch.nn.CrossEntropyLoss(),
+                loss=nn.CrossEntropyLoss(),
                 metrics=('accuracy', MulticlassAccuracy(num_classes=dataset_config[args.dataset]['classes'])),
             ),
-            device=device,
+            device=args.device,
         )
     else:
         loop = TrainingLoop(
@@ -350,7 +387,7 @@ def train_model(args, model, train_loader, test_loader, device):
                 loss=nn.MSELoss(),  # Use Mean Squared Error loss for regression
                 metrics=('mean_absolute_error', MeanAbsoluteError()),  # Use Mean Absolute Error metric
             ),
-            device=device,
+            device=args.device,
         )
 
     tr_per, te_per = loop.fit(
@@ -365,8 +402,8 @@ def train_model(args, model, train_loader, test_loader, device):
         verbose=2
     )
 
-    accuracy_tr = predict(args, model, train_loader, num_classes=dataset_config[args.dataset]['num_classes'])
-    accuracy    = predict(args, model, test_loader,  num_classes=dataset_config[args.dataset]['num_classes'])
+    accuracy_tr = predict(args, model, train_loader, num_classes=dataset_config[args.dataset]['classes'])
+    accuracy    = predict(args, model, test_loader,  num_classes=dataset_config[args.dataset]['classes'])
     
     ic(f"Accuracy: {accuracy_tr:.2f}%, {accuracy:.2f}%")
     ic('Finished Training. Save data args ...')
@@ -409,6 +446,7 @@ if __name__ == '__main__':
     parser.add_argument('--lr', default=0.001, type=float, help='')
     parser.add_argument('--bs', default=64, type=int, help='')
     parser.add_argument('--seed', default=42, type=int, help='')
+    parser.add_argument('--device', default="cuda", type=str, help='')
 
     parser.add_argument('--load_json', default="", type=str, help='')
 
@@ -433,4 +471,4 @@ if __name__ == '__main__':
     model = create_model(args)
     train_loader, test_loader = create_dataloader(args, batch_size=args.bs)
 
-    train_model(args, model, train_loader, test_loader, device="cuda")
+    train_model(args, model, train_loader, test_loader)

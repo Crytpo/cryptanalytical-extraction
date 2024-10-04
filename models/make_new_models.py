@@ -70,7 +70,7 @@ def make_new_mnist_model(hidden_size, layer_number):
             print("Bias: ", b)
     return model_save_path
 
-# make_new_mnist_model(8,2)
+make_new_mnist_model(8,2)
 # make_new_mnist_model(16,2)
 # make_new_mnist_model(32,2)
 # make_new_mnist_model(64,2)
